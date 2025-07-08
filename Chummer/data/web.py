@@ -71,33 +71,30 @@ def display_node_summary(element, path, stats):
             # Take the first child as a representative sample for recursion
             representative_child = children[0]
             
-            # Use columns for a clean layout of stats
-            col1, col2 = st.columns(2)
+            # --- Top-Down Layout for Summaries ---
 
-            # Display attribute statistics
-            with col1:
-                st.markdown("**Attribute Summary**")
-                has_attrs = False
-                for attr_name in representative_child.attrib.keys():
-                    attr_path = f"{child_path}[@{attr_name}]"
-                    if attr_path in stats:
-                        has_attrs = True
-                        st.write(f"`@{attr_name}`")
-                        # Filter out the internal count key for display
-                        value_counts = {k: v for k, v in stats[attr_path].items() if k != '__count__'}
-                        st.dataframe(pd.Series(value_counts, name="Count"), use_container_width=True)
-                if not has_attrs:
-                    st.caption("No attributes found.")
+            # Display attribute statistics (Top Section)
+            st.markdown("**Attribute Summary**")
+            has_attrs = False
+            for attr_name in representative_child.attrib.keys():
+                attr_path = f"{child_path}[@{attr_name}]"
+                if attr_path in stats:
+                    has_attrs = True
+                    st.write(f"`@{attr_name}`")
+                    # Filter out the internal count key for display
+                    value_counts = {k: v for k, v in stats[attr_path].items() if k != '__count__'}
+                    st.dataframe(pd.Series(value_counts, name="Count"), use_container_width=True)
+            if not has_attrs:
+                st.caption("No attributes found.")
 
-            # Display text content statistics
-            with col2:
-                st.markdown("**Text Content Summary**")
-                # Filter out the internal count key for display
-                text_counts = {k: v for k, v in stats[child_path].items() if k != '__count__'}
-                if text_counts:
-                    st.dataframe(pd.Series(text_counts, name="Count"), use_container_width=True)
-                else:
-                    st.caption("No direct text content found.")
+            # Display text content statistics (Bottom Section)
+            st.markdown("**Text Content Summary**")
+            # Filter out the internal count key for display
+            text_counts = {k: v for k, v in stats[child_path].items() if k != '__count__'}
+            if text_counts:
+                st.dataframe(pd.Series(text_counts, name="Count"), use_container_width=True)
+            else:
+                st.caption("No direct text content found.")
 
             # Recurse into the representative child's structure
             st.markdown("---")
