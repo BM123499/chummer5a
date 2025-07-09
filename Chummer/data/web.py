@@ -44,12 +44,10 @@ def display_node_summary(element, path, stats):
     Displays the summarized view for a group of elements with the same tag.
     This function is the core of the interactive tree.
     """
-    # 1. Group direct children of the current element by their tag name
     children_grouped = defaultdict(list)
     for child in element:
         children_grouped[child.tag].append(child)
 
-    # 2. Display text and attributes of the CURRENT element
     if element.text and element.text.strip():
         st.markdown("**Text:**")
         st.code(element.text.strip(), language=None)
@@ -58,7 +56,6 @@ def display_node_summary(element, path, stats):
         st.markdown("**Attributes:**")
         st.json(element.attrib)
 
-    # 3. Iterate through each group of children and create an expander for it
     if not children_grouped:
         st.info("This element has no nested children.")
         
@@ -68,35 +65,40 @@ def display_node_summary(element, path, stats):
         label = f"🔸 {tag} ({count} element{'s' if count > 1 else ''})"
 
         with st.expander(label):
-            # Take the first child as a representative sample for recursion
             representative_child = children[0]
             
-            # --- Top-Down Layout for Summaries ---
+            # --- IMPROVEMENT: Left-Right Layout for Summaries ---
+            col1, col2 = st.columns(2)
 
-            # Display attribute statistics (Top Section)
-            st.markdown("**Attribute Summary**")
-            has_attrs = False
-            for attr_name in representative_child.attrib.keys():
-                attr_path = f"{child_path}[@{attr_name}]"
-                if attr_path in stats:
-                    has_attrs = True
-                    st.write(f"`@{attr_name}`")
-                    # Filter out the internal count key for display
-                    value_counts = {k: v for k, v in stats[attr_path].items() if k != '__count__'}
-                    st.dataframe(pd.Series(value_counts, name="Count"), use_container_width=True)
-            if not has_attrs:
-                st.caption("No attributes found.")
+            # --- Left Column: Text Content Summary ---
+            with col1:
+                st.markdown("**Text Content Summary**")
+                text_counts = {k: v for k, v in stats[child_path].items() if k != '__count__'}
+                if text_counts:
+                    st.dataframe(pd.Series(text_counts, name="Count"), use_container_width=True)
+                else:
+                    st.caption("No direct text content found.")
 
-            # Display text content statistics (Bottom Section)
-            st.markdown("**Text Content Summary**")
-            # Filter out the internal count key for display
-            text_counts = {k: v for k, v in stats[child_path].items() if k != '__count__'}
-            if text_counts:
-                st.dataframe(pd.Series(text_counts, name="Count"), use_container_width=True)
-            else:
-                st.caption("No direct text content found.")
+            # --- Right Column: Attribute Summary ---
+            with col2:
+                st.markdown("**Attribute Summary**")
+                
+                # Check which attributes from the representative element have stats
+                found_attrs = []
+                for attr_name in representative_child.attrib.keys():
+                    attr_path = f"{child_path}[@{attr_name}]"
+                    if attr_path in stats:
+                        found_attrs.append((attr_name, attr_path))
 
-            # Recurse into the representative child's structure
+                if not found_attrs:
+                    st.caption("No attributes found.")
+                else:
+                    for attr_name, attr_path in found_attrs:
+                        st.write(f"`@{attr_name}`")
+                        value_counts = {k: v for k, v in stats[attr_path].items() if k != '__count__'}
+                        st.dataframe(pd.Series(value_counts, name="Count"), use_container_width=True)
+
+            # --- Recursion into child's structure ---
             st.markdown("---")
             st.markdown(f"**Exploring structure of the first `{tag}` element:**")
             display_node_summary(representative_child, child_path, stats)
@@ -110,33 +112,26 @@ if uploaded_file:
         tree = ET.parse(uploaded_file)
         root = tree.getroot()
 
-        # Perform analysis once
         with st.spinner("Analyzing XML..."):
             stats = collect_stats(root)
 
         st.success(f"Successfully parsed XML with root element: `<{root.tag}>`")
 
-        # Create tabs for different views
         tab1, tab2 = st.tabs(["📊 Interactive Tree View", "📈 Raw Statistics"])
 
         with tab1:
             st.header("Interactive Element Tree")
             st.write("Expand any element to see a summary of its children and explore the hierarchy.")
-            # Start the recursive display from the root
             display_node_summary(root, root.tag, stats)
 
         with tab2:
             st.header("Statistical Summary")
             st.write("This table shows the counts for every unique element path, attribute, and value found in the file.")
             
-            # Convert the statistics dictionary to a more readable DataFrame
             report_data = []
             for path, values in sorted(stats.items()):
                 total_occurrences = values.get('__count__', 0)
-                if "[@" in path:
-                    item_type = "Attribute"
-                else:
-                    item_type = "Element/Tag"
+                item_type = "Attribute" if "[@" in path else "Element/Tag"
                 report_data.append({
                     "Type": item_type,
                     "Path / Name": path,
@@ -144,7 +139,17 @@ if uploaded_file:
                 })
 
             df = pd.DataFrame(report_data)
-            st.dataframe(df, use_container_width=True, height=500)
+            
+            st.dataframe(
+                df,
+                use_container_width=True,
+                column_config={
+                    "Path / Name": st.column_config.TextColumn("Path / Name", width="large"),
+                    "Type": st.column_config.TextColumn("Type", width="small"),
+                    "Total Occurrences": st.column_config.NumberColumn("Total Occurrences", width="small"),
+                },
+                hide_index=True,
+            )
 
     except Exception as e:
         st.error(f"An error occurred while parsing the XML file: {e}")
