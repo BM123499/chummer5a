@@ -17,10 +17,6 @@
  *  https://github.com/chummer5a/chummer5a
  */
 
-using Chummer.Backend.Attributes;
-using Chummer.Backend.Skills;
-using Chummer.Backend.Uniques;
-using NLog;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -30,6 +26,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml;
+using Chummer.Backend.Attributes;
+using Chummer.Backend.Equipment;
+using Chummer.Backend.Skills;
+using Chummer.Backend.Uniques;
+using NLog;
 
 namespace Chummer
 {
@@ -566,6 +567,18 @@ namespace Chummer
                 case ImprovementType.BlockSkillDefault when _objCharacter.LastSavedVersion <= new ValueVersion(5, 224, 39):
                     _eImprovementType = ImprovementType.BlockSkillGroupDefault;
                     break;
+
+                case ImprovementType.PhysicalLimit when string.IsNullOrEmpty(_strImprovedName):
+                    _strImprovedName = "Physical";
+                    break;
+
+                case ImprovementType.MentalLimit when string.IsNullOrEmpty(_strImprovedName):
+                    _strImprovedName = "Mental";
+                    break;
+
+                case ImprovementType.SocialLimit when string.IsNullOrEmpty(_strImprovedName):
+                    _strImprovedName = "Social";
+                    break;
             }
 
             objNode.TryGetBoolFieldQuickly("custom", ref _blnCustom);
@@ -644,6 +657,21 @@ namespace Chummer
             set => _strNotes = value;
         }
 
+        public Task<string> GetNotesAsync(CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled<string>(token);
+            return Task.FromResult(_strNotes);
+        }
+
+        public Task SetNotesAsync(string value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            _strNotes = value;
+            return Task.CompletedTask;
+        }
+
         /// <summary>
         /// Forecolor to use for Notes in treeviews.
         /// </summary>
@@ -651,6 +679,21 @@ namespace Chummer
         {
             get => _colNotes;
             set => _colNotes = value;
+        }
+
+        public Task<Color> GetNotesColorAsync(CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled<Color>(token);
+            return Task.FromResult(_colNotes);
+        }
+
+        public Task SetNotesColorAsync(Color value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            _colNotes = value;
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -802,6 +845,22 @@ namespace Chummer
             }
         }
 
+        public Task SetValueAsync(decimal value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            if (_decVal != value)
+            {
+                _decVal = value;
+                if (Enabled)
+                {
+                    ImprovementManager.ClearCachedValue(_objCharacter, ImproveType, ImprovedName, token);
+                    return this.ProcessRelevantEventsAsync(token: token);
+                }
+            }
+            return Task.CompletedTask;
+        }
+
         /// <summary>
         /// The Rating value for the Improvement. This is 1 by default.
         /// </summary>
@@ -816,6 +875,18 @@ namespace Chummer
                     this.ProcessRelevantEvents();
                 }
             }
+        }
+
+        public Task SetRatingAsync(int value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            if (Interlocked.Exchange(ref _intRating, value) != value && Enabled)
+            {
+                ImprovementManager.ClearCachedValue(_objCharacter, ImproveType, ImprovedName, token);
+                return this.ProcessRelevantEventsAsync(token: token);
+            }
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -913,6 +984,17 @@ namespace Chummer
             }
         }
 
+        public Task SetEnabledAsync(bool value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            int intNewValue = value.ToInt32();
+            if (Interlocked.Exchange(ref _intEnabled, intNewValue) == intNewValue)
+                return Task.CompletedTask;
+            ImprovementManager.ClearCachedValue(_objCharacter, ImproveType, ImprovedName, token);
+            return this.ProcessRelevantEventsAsync(token: token);
+        }
+
         /// <summary>
         /// Whether we have completed our first setup. Needed to skip superfluous event updates at startup
         /// </summary>
@@ -947,7 +1029,7 @@ namespace Chummer
                 case ImprovementType.Attribute:
                 {
                     string strTargetAttribute = ImprovedName;
-                    using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                    using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                     out HashSet<string>
                                                                         setAttributePropertiesChanged))
                     {
@@ -3448,7 +3530,7 @@ namespace Chummer
                 case ImprovementType.Attribute:
                     {
                         string strTargetAttribute = ImprovedName;
-                        using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                        using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                         out HashSet<string>
                                                                             setAttributePropertiesChanged))
                         {
@@ -6029,17 +6111,19 @@ namespace Chummer
 
         #region UI Methods
 
-        public TreeNode CreateTreeNode(ContextMenuStrip cmsImprovement)
+        public async Task<TreeNode> CreateTreeNode(ContextMenuStrip cmsImprovement, CancellationToken token = default)
         {
-            TreeNode nodImprovement = new TreeNode
+            token.ThrowIfCancellationRequested();
+            TreeNode objNode = new TreeNode
             {
-                Tag = this,
+                Name = InternalId,
                 Text = CustomName,
-                ToolTipText = Notes.WordWrap(),
+                Tag = this,
                 ContextMenuStrip = cmsImprovement,
-                ForeColor = PreferredColor
+                ForeColor = await GetPreferredColorAsync(token).ConfigureAwait(false),
+                ToolTipText = (await GetNotesAsync(token).ConfigureAwait(false)).WordWrap()
             };
-            return nodImprovement;
+            return objNode;
         }
 
         public Color PreferredColor
@@ -6057,6 +6141,20 @@ namespace Chummer
                     ? ColorManager.GrayText
                     : ColorManager.WindowText;
             }
+        }
+
+        public async Task<Color> GetPreferredColorAsync(CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
+            {
+                return !Enabled
+                    ? ColorManager.GenerateCurrentModeDimmedColor(await GetNotesColorAsync(token).ConfigureAwait(false))
+                    : ColorManager.GenerateCurrentModeColor(await GetNotesColorAsync(token).ConfigureAwait(false));
+            }
+            return !Enabled
+                    ? ColorManager.GrayText
+                    : ColorManager.WindowText;
         }
 
         #endregion UI Methods

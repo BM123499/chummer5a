@@ -223,12 +223,12 @@ namespace Chummer
                 objXmlSpellNode.TryGetStringFieldQuickly("notesColor", ref sNotesColor);
                 _colNotes = ColorTranslator.FromHtml(sNotesColor);
 
-                if (GlobalSettings.InsertPdfNotesIfAvailable && string.IsNullOrEmpty(Notes))
+                if (GlobalSettings.InsertPdfNotesIfAvailable && string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
                 {
-                    Notes = await CommonFunctions.GetBookNotesAsync(objXmlSpellNode, Name,
+                    await SetNotesAsync(await CommonFunctions.GetBookNotesAsync(objXmlSpellNode, Name,
                         await GetCurrentDisplayNameAsync(token).ConfigureAwait(false), Source, Page,
                         await DisplayPageAsync(GlobalSettings.Language, token).ConfigureAwait(false), _objCharacter,
-                        token).ConfigureAwait(false);
+                        token).ConfigureAwait(false), token).ConfigureAwait(false);
                 }
 
                 if (objXmlSpellNode.TryGetStringFieldQuickly("descriptor", ref _strDescriptors))
@@ -529,7 +529,7 @@ namespace Chummer
                             await _objCharacter.TranslateExtraAsync(Extra, strLanguageToPrint, token: token)
                                 .ConfigureAwait(false), token).ConfigureAwait(false);
                     if (GlobalSettings.PrintNotes)
-                        await objWriter.WriteElementStringAsync("notes", Notes, token).ConfigureAwait(false);
+                        await objWriter.WriteElementStringAsync("notes", await GetNotesAsync(token).ConfigureAwait(false), token).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -701,7 +701,7 @@ namespace Chummer
             {
                 if (string.IsNullOrWhiteSpace(Descriptors))
                     return LanguageManager.GetString("String_None", strLanguage);
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                               out StringBuilder sbdReturn))
                 {
                     string strSpace = LanguageManager.GetString("String_Space", strLanguage);
@@ -771,7 +771,7 @@ namespace Chummer
                 token.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(Descriptors))
                     return await LanguageManager.GetStringAsync("String_None", strLanguage, token: token).ConfigureAwait(false);
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                               out StringBuilder sbdReturn))
                 {
                     string strSpace = await LanguageManager.GetStringAsync("String_Space", strLanguage, token: token)
@@ -1058,10 +1058,10 @@ namespace Chummer
                 int intMag = await (await _objCharacter.GetAttributeAsync("MAG", token: token).ConfigureAwait(false)).GetTotalValueAsync(token).ConfigureAwait(false);
                 // Barehanded Adept is limited to a Force of MAG/3 rounded up
                 int intHighestForce = BarehandedAdept
-                    ? (intMag + 2) / 3
+                    ? intMag.DivAwayFromZero(3)
                     : intMag * 2;
                 string strDV = await GetCalculatedDvAsync(token).ConfigureAwait(false);
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                               out StringBuilder sbdTip))
                 {
                     sbdTip.Append(await LanguageManager.GetStringAsync("Tip_SpellDrain", token: token).ConfigureAwait(false));
@@ -1287,7 +1287,7 @@ namespace Chummer
             {
                 if (Damage != "S" && Damage != "P")
                     return LanguageManager.GetString("String_None", strLanguage);
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                               out StringBuilder sbdReturn))
                 {
                     sbdReturn.Append('0');
@@ -1339,7 +1339,7 @@ namespace Chummer
                 if (Damage != "S" && Damage != "P")
                     return await LanguageManager.GetStringAsync("String_None", strLanguage, token: token)
                                                 .ConfigureAwait(false);
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                               out StringBuilder sbdReturn))
                 {
                     sbdReturn.Append('0');
@@ -1495,7 +1495,7 @@ namespace Chummer
                     int intDrainDv = 0;
                     if (strDv.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                     {
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                       out StringBuilder sbdReturn))
                         {
                             sbdReturn.Append(strDv);
@@ -1619,7 +1619,7 @@ namespace Chummer
                 int intDrainDv = 0;
                 if (strDv.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                   out StringBuilder sbdReturn))
                     {
                         sbdReturn.Append(strDv);
@@ -1902,8 +1902,52 @@ namespace Chummer
             }
             set
             {
+                using (LockObject.EnterReadLock())
+                {
+                    if (_strNotes == value)
+                        return;
+                }
                 using (LockObject.EnterUpgradeableReadLock())
                     _strNotes = value;
+            }
+        }
+
+        public async Task<string> GetNotesAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _strNotes;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task SetNotesAsync(string value, CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (_strNotes == value)
+                    return;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+            objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                _strNotes = value;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -1919,8 +1963,72 @@ namespace Chummer
             }
             set
             {
+                using (LockObject.EnterReadLock())
+                {
+                    if (_colNotes == value)
+                        return;
+                }
+
                 using (LockObject.EnterUpgradeableReadLock())
+                {
+                    if (_colNotes == value)
+                        return;
+                    using (LockObject.EnterWriteLock())
+                    {
+                        _colNotes = value;
+                    }
+                }
+            }
+        }
+
+        public async Task<Color> GetNotesColorAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _colNotes;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task SetNotesColorAsync(Color value, CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (value == _colNotes)
+                    return;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+
+            objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (_colNotes == value)
+                    return;
+                IAsyncDisposable objLocker2 = await LockObject.EnterWriteLockAsync(token).ConfigureAwait(false);
+                try
+                {
+                    token.ThrowIfCancellationRequested();
                     _colNotes = value;
+                }
+                finally
+                {
+                    await objLocker2.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -2090,8 +2198,16 @@ namespace Chummer
         /// </summary>
         public string UseSkill
         {
-            get => _strUseSkill;
-            set => _strUseSkill = value;
+            get
+            {
+                using (LockObject.EnterReadLock())
+                    return _strUseSkill;
+            }
+            set
+            {
+                using (LockObject.EnterUpgradeableReadLock())
+                    _strUseSkill = value;
+            }
         }
 
         #endregion Properties
@@ -2107,8 +2223,8 @@ namespace Chummer
             {
                 using (LockObject.EnterReadLock())
                 {
-                    string strSkillKey = string.Empty;
-                    if (string.IsNullOrEmpty(UseSkill))
+                    string strSkillKey = UseSkill;
+                    if (string.IsNullOrEmpty(strSkillKey))
                     {
                         XPathNavigator objCategoryNode = _objCharacter.LoadDataXPath("spells.xml")
                                               .SelectSingleNode(
@@ -2129,10 +2245,6 @@ namespace Chummer
                             objCategoryNode.TryGetStringFieldQuickly("@barehandedadeptskill", ref strSkillKey);
                         }
                     }
-                    else
-                    {
-                        strSkillKey = UseSkill;
-                    }
 
                     return string.IsNullOrEmpty(strSkillKey)
                         ? null
@@ -2151,8 +2263,8 @@ namespace Chummer
             try
             {
                 token.ThrowIfCancellationRequested();
-                string strSkillKey = string.Empty;
-                if (string.IsNullOrEmpty(UseSkill))
+                string strSkillKey = UseSkill;
+                if (string.IsNullOrEmpty(strSkillKey))
                 {
                     // If UseSkill is not set, we need to look it up in the XML file.
                     // This is done asynchronously to avoid blocking the UI thread.
@@ -2174,11 +2286,6 @@ namespace Chummer
                     {
                         objCategoryNode.TryGetStringFieldQuickly("@barehandedadeptskill", ref strSkillKey);
                     }
-                }
-                else
-                {
-                    // If UseSkill is set, we use that directly.
-                    strSkillKey = UseSkill;
                 }
 
                 return string.IsNullOrEmpty(strSkillKey)
@@ -2256,7 +2363,7 @@ namespace Chummer
             {
                 string strSpace = LanguageManager.GetString("String_Space");
                 using (LockObject.EnterReadLock())
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                               out StringBuilder sbdReturn))
                 {
                     string strFormat = strSpace + "{0}" + strSpace + "({1})";
@@ -2306,7 +2413,7 @@ namespace Chummer
             try
             {
                 token.ThrowIfCancellationRequested();
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                            out StringBuilder sbdReturn))
                 {
                     string strFormat = strSpace + "{0}" + strSpace + "({1})";
@@ -2480,10 +2587,10 @@ namespace Chummer
                                 {
                                     //TODO: THIS IS NOT SAFE. While we can mostly assume that Gear that add to SpellCategory are Foci, it's not reliable.
                                     // we are returning either the original improvement, null or a newly instantiated improvement
-                                    Improvement bestFocus = CompareFocusPower(objImprovement);
-                                    if (bestFocus != null)
+                                    Improvement objCompensatedImprovement = _objCharacter.GetPowerFocusAdjustedImprovementValue(objImprovement);
+                                    if (objCompensatedImprovement != null)
                                     {
-                                        yield return bestFocus;
+                                        yield return objCompensatedImprovement;
                                         if (blnExitAfterFirst) yield break;
                                     }
                                 }
@@ -2601,10 +2708,10 @@ namespace Chummer
                                 {
                                     //TODO: THIS IS NOT SAFE. While we can mostly assume that Gear that add to SpellCategory are Foci, it's not reliable.
                                     // we are returning either the original improvement, null or a newly instantiated improvement
-                                    Improvement bestFocus = await _objCharacter.GetBestFocusPowerAsync(objImprovement, token).ConfigureAwait(false);
-                                    if (bestFocus != null)
+                                    Improvement objCompensatedImprovement = await _objCharacter.GetPowerFocusAdjustedImprovementValueAsync(objImprovement, token).ConfigureAwait(false);
+                                    if (objCompensatedImprovement != null)
                                     {
-                                        lstReturn.Add(bestFocus);
+                                        lstReturn.Add(objCompensatedImprovement);
                                         if (blnExitAfterFirst)
                                             return false;
                                     }
@@ -2686,67 +2793,33 @@ namespace Chummer
             }
         }
 
-        /// <summary>
-        /// Method to check we are only applying the highest focus to the spell dicepool
-        /// </summary>
-        private Improvement CompareFocusPower(Improvement objImprovement)
-        {
-            using (LockObject.EnterReadLock())
-            {
-                List<Focus> list
-                    = _objCharacter.Foci.FindAll(
-                        x => x.GearObject?.Bonded == true && x.GearObject.Bonus.InnerText == "MAGRating");
-                if (list.Count > 0)
-                {
-                    // get any bonded foci that add to the base magic stat and return the highest rated one's rating
-                    int powerFocusRating = list.Max(x => x.Rating);
-
-                    // If our focus is higher, add in a partial bonus
-                    if (powerFocusRating > 0)
-                    {
-                        // This is hackz -- because we don't want to lose the original improvement's value
-                        // we instantiate a fake version of the improvement that isn't saved to represent the diff
-                        if (powerFocusRating < objImprovement.Value)
-                            return new Improvement(_objCharacter)
-                            {
-                                Value = objImprovement.Value - powerFocusRating,
-                                SourceName = objImprovement.SourceName,
-                                ImprovedName = objImprovement.ImprovedName,
-                                ImproveSource = objImprovement.ImproveSource,
-                                ImproveType = objImprovement.ImproveType
-                            };
-                        return null;
-                    }
-                }
-
-                return objImprovement;
-            }
-        }
-
         #endregion ComplexProperties
 
         #region UI Methods
 
-        public TreeNode CreateTreeNode(ContextMenuStrip cmsSpell, bool blnAddCategory = false)
+        public async Task<TreeNode> CreateTreeNode(ContextMenuStrip cmsSpell, bool blnForInitiationsTab = false, CancellationToken token = default)
         {
-            using (LockObject.EnterReadLock())
+            token.ThrowIfCancellationRequested();
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
             {
-                if (Grade != 0 && !string.IsNullOrEmpty(Source) && !_objCharacter.Settings.BookEnabled(Source))
+                token.ThrowIfCancellationRequested();
+                if ((blnForInitiationsTab ? Grade < 0 : Grade != 0) && !string.IsNullOrEmpty(Source) && !await _objCharacter.Settings.BookEnabledAsync(Source, token).ConfigureAwait(false))
                     return null;
 
-                string strText = CurrentDisplayName;
-                if (blnAddCategory)
+                string strText = await GetCurrentDisplayNameAsync(token).ConfigureAwait(false);
+                if (blnForInitiationsTab)
                 {
                     switch (Category)
                     {
                         case "Rituals":
-                            strText = LanguageManager.GetString("Label_Ritual")
-                                      + LanguageManager.GetString("String_Space") + strText;
+                            strText = await LanguageManager.GetStringAsync("Label_Ritual", token: token)
+                                      + await LanguageManager.GetStringAsync("String_Space", token: token) + strText;
                             break;
 
                         case "Enchantments":
-                            strText = LanguageManager.GetString("Label_Enchantment")
-                                      + LanguageManager.GetString("String_Space") + strText;
+                            strText = await LanguageManager.GetStringAsync("Label_Enchantment", token: token)
+                                      + await LanguageManager.GetStringAsync("String_Space", token: token) + strText;
                             break;
                     }
                 }
@@ -2757,11 +2830,17 @@ namespace Chummer
                     Text = strText,
                     Tag = this,
                     ContextMenuStrip = cmsSpell,
-                    ForeColor = PreferredColor,
-                    ToolTipText = Notes.WordWrap()
+                    ForeColor = blnForInitiationsTab
+                        ? await GetPreferredColorForInitiationsTabAsync(token).ConfigureAwait(false)
+                        : await GetPreferredColorAsync(token).ConfigureAwait(false),
+                    ToolTipText = (await GetNotesAsync(token).ConfigureAwait(false)).WordWrap()
                 };
 
                 return objNode;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -2785,18 +2864,81 @@ namespace Chummer
             }
         }
 
+        public async Task<Color> GetPreferredColorAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (!string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
+                {
+                    return Grade != 0
+                        ? ColorManager.GenerateCurrentModeDimmedColor(await GetNotesColorAsync(token).ConfigureAwait(false))
+                        : ColorManager.GenerateCurrentModeColor(await GetNotesColorAsync(token).ConfigureAwait(false));
+                }
+                return Grade != 0
+                    ? ColorManager.GrayText
+                    : ColorManager.WindowText;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        public Color PreferredColorForInitiationsTab
+        {
+            get
+            {
+                using (LockObject.EnterReadLock())
+                {
+                    if (!string.IsNullOrEmpty(Notes))
+                    {
+                        return Grade < 0
+                            ? ColorManager.GenerateCurrentModeDimmedColor(NotesColor)
+                            : ColorManager.GenerateCurrentModeColor(NotesColor);
+                    }
+
+                    return Grade < 0
+                        ? ColorManager.GrayText
+                        : ColorManager.WindowText;
+                }
+            }
+        }
+
+        public async Task<Color> GetPreferredColorForInitiationsTabAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (!string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
+                {
+                    return Grade < 0
+                        ? ColorManager.GenerateCurrentModeDimmedColor(await GetNotesColorAsync(token).ConfigureAwait(false))
+                        : ColorManager.GenerateCurrentModeColor(await GetNotesColorAsync(token).ConfigureAwait(false));
+                }
+                return Grade < 0
+                    ? ColorManager.GrayText
+                    : ColorManager.WindowText;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
         #endregion UI Methods
 
         public bool Remove(bool blnConfirmDelete = true)
         {
             using (LockObject.EnterUpgradeableReadLock())
             {
-                if (blnConfirmDelete)
+                if (Grade < 0)
+                    return false;
+                if (blnConfirmDelete && !CommonFunctions.ConfirmDelete(LanguageManager.GetString("Message_DeleteSpell")))
                 {
-                    if (Grade != 0) // If we are prompting, we are not removing this by removing the initiation/submersion that granted it
-                        return false;
-                    if (!CommonFunctions.ConfirmDelete(LanguageManager.GetString("Message_DeleteSpell")))
-                        return false;
+                    return false;
                 }
 
                 using (LockObject.EnterWriteLock())
@@ -2818,14 +2960,13 @@ namespace Chummer
             try
             {
                 token.ThrowIfCancellationRequested();
-                if (blnConfirmDelete)
-                {
-                    if (Grade != 0) // If we are prompting, we are not removing this by removing the initiation/submersion that granted it
-                        return false;
-                    if (!await CommonFunctions
+                if (Grade < 0)
+                    return false;
+                if (blnConfirmDelete && !await CommonFunctions
                             .ConfirmDeleteAsync(
                                 await LanguageManager.GetStringAsync("Message_DeleteSpell", token: token)
                                     .ConfigureAwait(false), token).ConfigureAwait(false))
+                {
                         return false;
                 }
 

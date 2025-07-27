@@ -18,6 +18,7 @@
  */
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
@@ -331,7 +332,7 @@ namespace Chummer.Backend.Equipment
                     return;
                 }
 
-                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                            out HashSet<string> setAttributesToRefresh))
                 {
                     bool blnDoEssenceImprovementsRefresh = false;
@@ -583,7 +584,7 @@ namespace Chummer.Backend.Equipment
                             break;
                     }
 
-                    using (new FetchSafelyFromPool<Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>>>(
+                    using (new FetchSafelyFromSafeObjectPool<Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>>>(
                                Utils.DictionaryForMultiplePropertyChangedPool,
                                out Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>>
                                    dicChangedProperties))
@@ -884,9 +885,9 @@ namespace Chummer.Backend.Equipment
                                 // ReSharper disable once MethodHasAsyncOverloadWithCancellation
                                 Page, DisplayPage(GlobalSettings.Language), _objCharacter, token);
                         else
-                            Notes = await CommonFunctions.GetBookNotesAsync(objXmlCyberware, Name,
+                            await SetNotesAsync(await CommonFunctions.GetBookNotesAsync(objXmlCyberware, Name,
                                 await GetCurrentDisplayNameAsync(token).ConfigureAwait(false), Source, Page,
-                                await DisplayPageAsync(GlobalSettings.Language, token).ConfigureAwait(false), _objCharacter, token).ConfigureAwait(false);
+                                await DisplayPageAsync(GlobalSettings.Language, token).ConfigureAwait(false), _objCharacter, token).ConfigureAwait(false), token).ConfigureAwait(false);
                     }
 
                     _blnAddToParentESS = objXmlCyberware["addtoparentess"] != null
@@ -931,11 +932,18 @@ namespace Chummer.Backend.Equipment
                     else
                     {
                         _blnCanSwapAttributes = true;
-                        string[] strArray = _strAttributeArray.Split(',');
-                        _strAttack = strArray[0];
-                        _strSleaze = strArray[1];
-                        _strDataProcessing = strArray[2];
-                        _strFirewall = strArray[3];
+                        string[] strArray = _strAttributeArray.SplitFixedSizePooledArray(',', 4);
+                        try
+                        {
+                            _strAttack = strArray[0];
+                            _strSleaze = strArray[1];
+                            _strDataProcessing = strArray[2];
+                            _strFirewall = strArray[3];
+                        }
+                        finally
+                        {
+                            ArrayPool<string>.Shared.Return(strArray);
+                        }
                     }
 
                     objXmlCyberware.TryGetStringFieldQuickly("modattack", ref _strModAttack);
@@ -955,7 +963,7 @@ namespace Chummer.Backend.Equipment
                         xmlCyberwareNavigator.SelectSingleNodeAndCacheExpression("allowsubsystems", token);
                     if (xmlAllowSubsystems != null)
                     {
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                    out StringBuilder sbdSubsystem))
                         {
                             foreach (XPathNavigator xmlSubsystem in xmlAllowSubsystems.SelectAndCacheExpression(
@@ -1073,9 +1081,10 @@ namespace Chummer.Backend.Equipment
                                         GlobalSettings.CultureInfo,
                                         await LanguageManager.GetStringAsync("String_SelectVariableCost", token: token).ConfigureAwait(false),
                                         await GetCurrentDisplayNameShortAsync(token).ConfigureAwait(false));
+                                    int intDecimalPlaces = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMaxNuyenDecimalsAsync(token).ConfigureAwait(false);
                                     using (ThreadSafeForm<SelectNumber> frmPickNumber
                                            = await ThreadSafeForm<SelectNumber>.GetAsync(
-                                               () => new SelectNumber(_objCharacter.Settings.MaxNuyenDecimals)
+                                               () => new SelectNumber(intDecimalPlaces)
                                                {
                                                    Minimum = decMin,
                                                    Maximum = decMax,
@@ -1497,7 +1506,7 @@ namespace Chummer.Backend.Equipment
 
                             if (string.IsNullOrEmpty(BlocksMounts) || lstCyberwareToCheck.Count == 0)
                                 return;
-                            using (new FetchSafelyFromPool<HashSet<string>>(
+                            using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(
                                        Utils.StringHashSetPool, out HashSet<string> setBlocksMounts))
                             {
                                 setBlocksMounts.AddRange(BlocksMounts
@@ -1540,7 +1549,7 @@ namespace Chummer.Backend.Equipment
 
                             if (string.IsNullOrEmpty(BlocksMounts) || lstCyberwareToCheck.Count == 0)
                                 return;
-                            using (new FetchSafelyFromPool<HashSet<string>>(
+                            using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(
                                        Utils.StringHashSetPool, out HashSet<string> setBlocksMounts))
                             {
                                 setBlocksMounts.AddRange(BlocksMounts
@@ -1682,7 +1691,7 @@ namespace Chummer.Backend.Equipment
 
                             if (string.IsNullOrEmpty(strBlocksMounts) || lstCyberwareToCheck.Count == 0)
                                 return;
-                            using (new FetchSafelyFromPool<HashSet<string>>(
+                            using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(
                                        Utils.StringHashSetPool, out HashSet<string> setBlocksMounts))
                             {
                                 setBlocksMounts.AddRange(strBlocksMounts
@@ -1728,7 +1737,7 @@ namespace Chummer.Backend.Equipment
 
                             if (string.IsNullOrEmpty(BlocksMounts) || lstCyberwareToCheck.Count == 0)
                                 return;
-                            using (new FetchSafelyFromPool<HashSet<string>>(
+                            using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(
                                        Utils.StringHashSetPool, out HashSet<string> setBlocksMounts))
                             {
                                 setBlocksMounts.AddRange(BlocksMounts
@@ -2832,9 +2841,9 @@ namespace Chummer.Backend.Equipment
                         string strSpace = await LanguageManager
                             .GetStringAsync("String_Space", strLanguageToPrint, token: token)
                             .ConfigureAwait(false);
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                    out StringBuilder sbdName))
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                    out StringBuilder sbdNameEnglish))
                         {
                             sbdName.Append(await DisplayNameShortAsync(strLanguageToPrint, token).ConfigureAwait(false))
@@ -2886,7 +2895,7 @@ namespace Chummer.Backend.Equipment
 
                     await objWriter.WriteElementStringAsync("ess",
                         (await GetCalculatedESSAsync(token).ConfigureAwait(false))
-                        .ToString(_objCharacter.Settings.EssenceFormat, objCulture),
+                        .ToString(await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetEssenceFormatAsync(token).ConfigureAwait(false), objCulture),
                         token: token).ConfigureAwait(false);
                     await objWriter.WriteElementStringAsync("capacity", Capacity, token: token).ConfigureAwait(false);
                     await objWriter
@@ -2894,23 +2903,26 @@ namespace Chummer.Backend.Equipment
                             await TotalAvailAsync(objCulture, strLanguageToPrint, token).ConfigureAwait(false),
                             token: token)
                         .ConfigureAwait(false);
+                    string strNuyenFormat = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetNuyenFormatAsync(token).ConfigureAwait(false);
                     await objWriter
                         .WriteElementStringAsync(
-                            "cost", TotalCost.ToString(_objCharacter.Settings.NuyenFormat, objCulture), token: token)
+                            "cost", (await GetTotalCostAsync(token).ConfigureAwait(false))
+                                .ToString(strNuyenFormat, objCulture), token: token)
                         .ConfigureAwait(false);
                     await objWriter
                         .WriteElementStringAsync(
                             "owncost",
                             (await GetOwnCostAsync(token).ConfigureAwait(false)).ToString(
-                                _objCharacter.Settings.NuyenFormat, objCulture), token: token)
+                                strNuyenFormat, objCulture), token: token)
                         .ConfigureAwait(false);
+                    string strWeightFormat = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetWeightFormatAsync(token).ConfigureAwait(false);
                     await objWriter
                         .WriteElementStringAsync(
-                            "weight", TotalWeight.ToString(_objCharacter.Settings.WeightFormat, objCulture),
+                            "weight", TotalWeight.ToString(strWeightFormat, objCulture),
                             token: token).ConfigureAwait(false);
                     await objWriter
                         .WriteElementStringAsync("ownweight",
-                            OwnWeight.ToString(_objCharacter.Settings.WeightFormat, objCulture),
+                            OwnWeight.ToString(strWeightFormat, objCulture),
                             token: token).ConfigureAwait(false);
                     await objWriter
                         .WriteElementStringAsync(
@@ -3040,7 +3052,7 @@ namespace Chummer.Backend.Equipment
                     }
 
                     if (GlobalSettings.PrintNotes)
-                        await objWriter.WriteElementStringAsync("notes", Notes, token: token).ConfigureAwait(false);
+                        await objWriter.WriteElementStringAsync("notes", await GetNotesAsync(token).ConfigureAwait(false), token: token).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -4224,6 +4236,31 @@ namespace Chummer.Backend.Equipment
             }
         }
 
+        public bool PlugsIntoTargetCyberware(Cyberware objTarget)
+        {
+            using (LockObject.EnterReadLock())
+            {
+                string strPlugsIntoMount = PlugsIntoModularMount;
+                return !string.IsNullOrEmpty(strPlugsIntoMount) && strPlugsIntoMount == objTarget.HasModularMount;
+            }
+        }
+
+        public async Task<bool> PlugsIntoTargetCyberwareAsync(Cyberware objTarget, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                string strPlugsIntoMount = await GetPlugsIntoModularMountAsync(token).ConfigureAwait(false);
+                return !string.IsNullOrEmpty(strPlugsIntoMount) && strPlugsIntoMount == await objTarget.GetHasModularMountAsync(token).ConfigureAwait(false);
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
         /// <summary>
         /// Returns whether the 'ware is currently equipped (with improvements applied) or not.
         /// </summary>
@@ -5362,7 +5399,7 @@ namespace Chummer.Backend.Equipment
                 if (_intProcessPropertyChanges == 0
                     || (ParentVehicle != null && string.IsNullOrEmpty(PlugsIntoModularMount)))
                     return;
-                using (new FetchSafelyFromPool<Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>>>(
+                using (new FetchSafelyFromSafeObjectPool<Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>>>(
                            Utils.DictionaryForMultiplePropertyChangedPool,
                            out Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>> dicChangedProperties))
                 {
@@ -5547,7 +5584,7 @@ namespace Chummer.Backend.Equipment
                 if (_intProcessPropertyChanges == 0
                     || (await GetParentVehicleAsync(token).ConfigureAwait(false) != null && string.IsNullOrEmpty(await GetPlugsIntoModularMountAsync(token).ConfigureAwait(false))))
                     return;
-                using (new FetchSafelyFromPool<Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>>>(
+                using (new FetchSafelyFromSafeObjectPool<Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>>>(
                            Utils.DictionaryForMultiplePropertyChangedPool,
                            out Dictionary<INotifyMultiplePropertiesChangedAsync, HashSet<string>> dicChangedProperties))
                 {
@@ -6727,7 +6764,7 @@ namespace Chummer.Backend.Equipment
             {
                 using (LockObject.EnterReadLock())
                 {
-                    return BaseMatrixBoxes + (this.GetTotalMatrixAttribute("Device Rating") + 1) / 2 +
+                    return BaseMatrixBoxes + this.GetTotalMatrixAttribute("Device Rating").DivAwayFromZero(2) +
                            TotalBonusMatrixBoxes;
                 }
             }
@@ -6852,11 +6889,47 @@ namespace Chummer.Backend.Equipment
 
                 using (LockObject.EnterUpgradeableReadLock())
                 {
-                    if (_strNotes == value)
-                        return;
-                    using (LockObject.EnterWriteLock())
-                        _strNotes = value;
+                    _strNotes = value;
                 }
+            }
+        }
+
+        public async Task<string> GetNotesAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _strNotes;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task SetNotesAsync(string value, CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (_strNotes == value)
+                    return;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+            objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                _strNotes = value;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -6883,8 +6956,61 @@ namespace Chummer.Backend.Equipment
                     if (_colNotes == value)
                         return;
                     using (LockObject.EnterWriteLock())
+                    {
                         _colNotes = value;
+                    }
                 }
+            }
+        }
+
+        public async Task<Color> GetNotesColorAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _colNotes;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task SetNotesColorAsync(Color value, CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (value == _colNotes)
+                    return;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+
+            objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (_colNotes == value)
+                    return;
+                IAsyncDisposable objLocker2 = await LockObject.EnterWriteLockAsync(token).ConfigureAwait(false);
+                try
+                {
+                    token.ThrowIfCancellationRequested();
+                    _colNotes = value;
+                }
+                finally
+                {
+                    await objLocker2.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -7781,12 +7907,7 @@ namespace Chummer.Backend.Equipment
                 bool blnOrGear = false;
                 if (strAvail.Length > 0)
                 {
-                    if (strAvail.StartsWith("FixedValues(", StringComparison.Ordinal))
-                    {
-                        string[] strValues = strAvail.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                                                     .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                        strAvail = strValues[Math.Max(Math.Min(Rating, strValues.Length) - 1, 0)];
-                    }
+                    strAvail = strAvail.ProcessFixedValuesString(() => Rating);
 
                     blnOrGear = strAvail.EndsWith(" or Gear", StringComparison.Ordinal);
                     if (blnOrGear)
@@ -7803,7 +7924,7 @@ namespace Chummer.Backend.Equipment
                         intAvail = 0;
                     if (strAvail.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                     {
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
                         {
                             sbdAvail.Append(strAvail.TrimStart('+'));
                             sbdAvail.CheapReplace(strAvail, "MinRating",
@@ -7895,12 +8016,7 @@ namespace Chummer.Backend.Equipment
                 bool blnOrGear = false;
                 if (strAvail.Length > 0)
                 {
-                    if (strAvail.StartsWith("FixedValues(", StringComparison.Ordinal))
-                    {
-                        string[] strValues = strAvail.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                                                     .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                        strAvail = strValues[Math.Max(Math.Min(await GetRatingAsync(token).ConfigureAwait(false), strValues.Length) - 1, 0)];
-                    }
+                    strAvail = await strAvail.ProcessFixedValuesStringAsync(() => GetRatingAsync(token), token).ConfigureAwait(false);
 
                     blnOrGear = strAvail.EndsWith(" or Gear", StringComparison.Ordinal);
                     if (blnOrGear)
@@ -7917,7 +8033,7 @@ namespace Chummer.Backend.Equipment
                         intAvail = 0;
                     if (strAvail.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                     {
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
                         {
                             sbdAvail.Append(strAvail.TrimStart('+'));
                             await sbdAvail.CheapReplaceAsync(strAvail, "MinRating",
@@ -8008,15 +8124,9 @@ namespace Chummer.Backend.Equipment
                 using (LockObject.EnterReadLock())
                 {
                     string strCapacity = Capacity;
-                    if (strCapacity.StartsWith("FixedValues(", StringComparison.Ordinal))
-                    {
-                        string[] strValues = strCapacity.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                                                        .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                        strCapacity = strValues[Math.Max(Math.Min(Rating, strValues.Length) - 1, 0)];
-                    }
-
                     if (string.IsNullOrEmpty(strCapacity))
                         return 0.0m.ToString("#,0.##", GlobalSettings.CultureInfo);
+                    strCapacity = strCapacity.ProcessFixedValuesString(() => Rating);
                     if (strCapacity == "[*]")
                         return "*";
                     string strReturn;
@@ -8061,7 +8171,7 @@ namespace Chummer.Backend.Equipment
                         if (Children.Any(x => x.AddToParentCapacity))
                         {
                             // Run through its Children and deduct the Capacity costs.
-                            using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                           out StringBuilder sbdSecondHalf))
                             {
                                 foreach (Cyberware objChildCyberware in Children.Where(
@@ -8127,7 +8237,7 @@ namespace Chummer.Backend.Equipment
                             if (Children.Any(x => x.AddToParentCapacity))
                             {
                                 // Run through its Children and deduct the Capacity costs.
-                                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                               out StringBuilder sbdCapacity))
                                 {
                                     foreach (Cyberware objChildCyberware in Children.Where(objChild =>
@@ -8183,15 +8293,10 @@ namespace Chummer.Backend.Equipment
             {
                 token.ThrowIfCancellationRequested();
                 string strCapacity = Capacity;
-                if (strCapacity.StartsWith("FixedValues(", StringComparison.Ordinal))
-                {
-                    string[] strValues = strCapacity.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                        .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    strCapacity = strValues[Math.Max(Math.Min(await GetRatingAsync(token).ConfigureAwait(false), strValues.Length) - 1, 0)];
-                }
-
                 if (string.IsNullOrEmpty(strCapacity))
                     return 0.0m.ToString("#,0.##", GlobalSettings.CultureInfo);
+                strCapacity = await strCapacity.ProcessFixedValuesStringAsync(() => GetRatingAsync(token), token).ConfigureAwait(false);
+
                 if (strCapacity == "[*]")
                     return "*";
                 string strReturn;
@@ -8236,7 +8341,7 @@ namespace Chummer.Backend.Equipment
                     if (await (await GetChildrenAsync(token).ConfigureAwait(false)).AnyAsync(x => x.GetAddToParentCapacityAsync(token), token: token).ConfigureAwait(false))
                     {
                         // Run through its Children and deduct the Capacity costs.
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                    out StringBuilder sbdSecondHalf))
                         {
                             await (await GetChildrenAsync(token).ConfigureAwait(false)).ForEachAsync(async objChildCyberware =>
@@ -8300,7 +8405,7 @@ namespace Chummer.Backend.Equipment
                         if (await (await GetChildrenAsync(token).ConfigureAwait(false)).AnyAsync(x => x.GetAddToParentCapacityAsync(token), token: token).ConfigureAwait(false))
                         {
                             // Run through its Children and deduct the Capacity costs.
-                            using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                        out StringBuilder sbdCapacity))
                             {
                                 await (await GetChildrenAsync(token).ConfigureAwait(false)).ForEachAsync(async objChildCyberware =>
@@ -8447,8 +8552,6 @@ namespace Chummer.Backend.Equipment
                     return intRating / -100m;
                 }
 
-                decimal decReturn;
-
                 string strESS = ESS;
                 if (strESS.StartsWith("FixedValues(", StringComparison.Ordinal))
                 {
@@ -8458,14 +8561,14 @@ namespace Chummer.Backend.Equipment
                         strSuffix = strESS.Substring(strESS.LastIndexOf(')') + 1);
                         strESS = strESS.TrimEndOnce(strSuffix);
                     }
-
-                    string[] strValues = strESS.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                        .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    strESS = strValues[Math.Max(Math.Min(intRating, strValues.Length) - 1, 0)];
+                    if (blnSync)
+                        strESS = strESS.ProcessFixedValuesString(() => Rating);
+                    else
+                        strESS = await strESS.ProcessFixedValuesStringAsync(() => GetRatingAsync(token), token).ConfigureAwait(false);
                     strESS += strSuffix;
                 }
 
-                if (strESS.DoesNeedXPathProcessingToBeConvertedToNumber(out decReturn))
+                if (strESS.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decReturn))
                 {
                     // If the cost is determined by the Rating or there's a math operation in play, evaluate the expression.
                     (bool blnIsSuccess, object objProcess) = blnSync
@@ -8650,11 +8753,10 @@ namespace Chummer.Backend.Equipment
                 decimal decTotalModifier = Math.Max(0, decESSMultiplier * decTotalESSMultiplier);
                 if (_objCharacter != null)
                 {
-                    string strPostModifierExpression
-                        = (blnSync
-                            ? _objCharacter.Settings
-                            : await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false))
-                        .EssenceModifierPostExpression;
+                    string strPostModifierExpression = blnSync
+                        ? _objCharacter.Settings.EssenceModifierPostExpression
+                        : await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false))
+                            .GetEssenceModifierPostExpressionAsync(token).ConfigureAwait(false);
                     if (!string.IsNullOrEmpty(strPostModifierExpression) && strPostModifierExpression != "{Modifier}")
                     {
                         strPostModifierExpression = strPostModifierExpression.Replace("{Modifier}",
@@ -8678,9 +8780,16 @@ namespace Chummer.Backend.Equipment
 
                 decReturn *= decTotalModifier;
 
-                if (_objCharacter?.Settings.DontRoundEssenceInternally == false)
-                    decReturn = decimal.Round(decReturn, _objCharacter.Settings.EssenceDecimals,
+                if (_objCharacter != null && !(blnSync
+                        ? _objCharacter.Settings.DontRoundEssenceInternally
+                        : await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetDontRoundEssenceInternallyAsync(token).ConfigureAwait(false)))
+                {
+                    decReturn = decimal.Round(decReturn,
+                        blnSync
+                            ? _objCharacter.Settings.EssenceDecimals
+                            : await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetEssenceDecimalsAsync(token).ConfigureAwait(false),
                         MidpointRounding.AwayFromZero);
+                }
 
                 if (blnSync)
                 {
@@ -8754,16 +8863,11 @@ namespace Chummer.Backend.Equipment
                     }
                 }
 
-                if (strExpression.StartsWith("FixedValues(", StringComparison.Ordinal))
-                {
-                    string[] strValues = strExpression.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                                                      .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    strExpression = strValues[Math.Max(0, Math.Min(Rating, strValues.Length) - 1)].Trim('[', ']');
-                }
+                strExpression = strExpression.ProcessFixedValuesString(() => Rating);
 
                 if (strExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdValue))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdValue))
                     {
                         sbdValue.Append(strExpression);
                         sbdValue.CheapReplace(strExpression, "{Rating}", () => Rating.ToString(GlobalSettings.InvariantCultureInfo));
@@ -8841,16 +8945,11 @@ namespace Chummer.Backend.Equipment
                     }
                 }
 
-                if (strExpression.StartsWith("FixedValues(", StringComparison.Ordinal))
-                {
-                    string[] strValues = strExpression.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                        .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    strExpression = strValues[Math.Max(0, Math.Min(await GetRatingAsync(token).ConfigureAwait(false), strValues.Length) - 1)].Trim('[', ']');
-                }
+                strExpression = await strExpression.ProcessFixedValuesStringAsync(() => GetRatingAsync(token), token).ConfigureAwait(false);
 
                 if (strExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdValue))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdValue))
                     {
                         sbdValue.Append(strExpression);
                         sbdValue.Replace("{Rating}", (await GetRatingAsync(token).ConfigureAwait(false)).ToString(GlobalSettings.InvariantCultureInfo));
@@ -8951,14 +9050,11 @@ namespace Chummer.Backend.Equipment
             }
         }
 
-        /// <summary>
-        /// Total cost of the just the Cyberware itself before we factor in any multipliers.
-        /// </summary>
-        public decimal CalculatedOwnCostPreMultipliers(int intRating, Grade objGrade)
+        private string ProcessCostExpression(string strExpression, int intRating, Grade objGrade, Cyberware objIgnoreChild = null)
         {
             using (LockObject.EnterReadLock())
             {
-                string strCostExpression = Cost;
+                string strCostExpression = strExpression;
 
                 if (strCostExpression.StartsWith("FixedValues(", StringComparison.Ordinal))
                 {
@@ -8969,10 +9065,7 @@ namespace Chummer.Backend.Equipment
                         strCostExpression = strCostExpression.TrimEndOnce(strSuffix);
                     }
 
-                    string[] strValues = strCostExpression.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                                                          .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    strCostExpression = strValues[Math.Max(Math.Min(intRating, strValues.Length) - 1, 0)]
-                        .Trim('[', ']');
+                    strCostExpression = strCostExpression.ProcessFixedValuesString(intRating);
                     strCostExpression += strSuffix;
                 }
 
@@ -8981,30 +9074,30 @@ namespace Chummer.Backend.Equipment
                 if (_objParent != null)
                 {
                     if (strCostExpression.Contains("Parent Cost"))
-                        strParentCost = _objParent.Cost;
+                        strParentCost = _objParent.ProcessCostExpression(_objParent.Cost, _objParent.Rating, _objParent.Grade, this);
                     if (strCostExpression.Contains("Parent Gear Cost"))
-                        decTotalParentGearCost += _objParent.GearChildren.Sum(loopGear => loopGear.CalculatedCost);
+                        decTotalParentGearCost = _objParent.GearChildren.Sum(loopGear => loopGear.CalculatedCost);
                 }
 
                 decimal decTotalGearCost = 0;
                 if (GearChildren.Count > 0 && strCostExpression.Contains("Gear Cost"))
                 {
-                    decTotalGearCost += GearChildren.Sum(loopGear => loopGear.CalculatedCost);
+                    decTotalGearCost = GearChildren.Sum(loopGear => loopGear.CalculatedCost);
                 }
 
                 decimal decTotalChildrenCost = 0;
                 if (Children.Count > 0 && strCostExpression.Contains("Children Cost"))
                 {
                     decTotalChildrenCost
-                        += Children.Sum(loopWare => loopWare.CalculatedTotalCost(loopWare.Rating, objGrade));
+                        = Children.Sum(x => !ReferenceEquals(x, objIgnoreChild), x => x.CalculatedTotalCost(x.Rating, objGrade));
                 }
 
                 if (string.IsNullOrEmpty(strCostExpression))
-                    return 0;
+                    return "0";
 
                 if (strCostExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decReturn))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
                     {
                         sbdCost.Append(strCostExpression.TrimStart('+'));
                         sbdCost.Replace("Parent Cost", strParentCost);
@@ -9017,14 +9110,111 @@ namespace Chummer.Backend.Equipment
                                              () => MinRating.ToString(GlobalSettings.InvariantCultureInfo));
                         sbdCost.Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo));
                         _objCharacter.AttributeSection.ProcessAttributesInXPath(sbdCost, strCostExpression);
-                        (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(sbdCost.ToString());
-                        if (blnIsSuccess)
-                            decReturn = Convert.ToDecimal((double)objProcess);
+                        string strToEvaluate = sbdCost.ToString();
+                        (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strToEvaluate);
+                        return blnIsSuccess
+                            ? Convert.ToDecimal((double)objProcess).ToString(GlobalSettings.InvariantCultureInfo)
+                            : strToEvaluate;
                     }
                 }
 
-                return decReturn;
+                return decReturn.ToString(GlobalSettings.InvariantCultureInfo);
             }
+        }
+
+        private async Task<string> ProcessCostExpressionAsync(string strExpression, int intRating, Grade objGrade, Cyberware objIgnoreChild = null, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                string strCostExpression = Cost;
+
+                if (strCostExpression.StartsWith("FixedValues(", StringComparison.Ordinal))
+                {
+                    string strSuffix = string.Empty;
+                    if (!strCostExpression.EndsWith(')'))
+                    {
+                        strSuffix = strCostExpression.Substring(strCostExpression.LastIndexOf(')') + 1);
+                        strCostExpression = strCostExpression.TrimEndOnce(strSuffix);
+                    }
+
+                    strCostExpression = strCostExpression.ProcessFixedValuesString(intRating);
+                    strCostExpression += strSuffix;
+                }
+
+                string strParentCost = "0";
+                decimal decTotalParentGearCost = 0;
+                if (_objParent != null)
+                {
+                    if (strCostExpression.Contains("Parent Cost"))
+                        strParentCost = await _objParent.ProcessCostExpressionAsync(_objParent.Cost,
+                            await _objParent.GetRatingAsync(token).ConfigureAwait(false),
+                            await _objParent.GetGradeAsync(token).ConfigureAwait(false), this, token).ConfigureAwait(false);
+                    if (strCostExpression.Contains("Parent Gear Cost"))
+                        decTotalParentGearCost = await (await _objParent.GetGearChildrenAsync(token).ConfigureAwait(false)).SumAsync(loopGear => loopGear.GetCalculatedCostAsync(token), token).ConfigureAwait(false);
+                }
+
+                decimal decTotalGearCost = 0;
+                if (strCostExpression.Contains("Gear Cost"))
+                {
+                    decTotalGearCost = await (await GetGearChildrenAsync(token).ConfigureAwait(false)).SumAsync(loopGear => loopGear.GetCalculatedCostAsync(token), token).ConfigureAwait(false);
+                }
+
+                decimal decTotalChildrenCost = 0;
+                if (strCostExpression.Contains("Children Cost"))
+                {
+                    decTotalChildrenCost = await (await GetChildrenAsync(token).ConfigureAwait(false))
+                        .SumAsync(x => !ReferenceEquals(x, objIgnoreChild),
+                            async x => await x.CalculatedTotalCostAsync(await x.GetRatingAsync(token).ConfigureAwait(false), objGrade, token).ConfigureAwait(false),
+                            token).ConfigureAwait(false);
+                }
+
+                if (string.IsNullOrEmpty(strCostExpression))
+                    return "0";
+
+                if (strCostExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decReturn))
+                {
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
+                    {
+                        sbdCost.Append(strCostExpression.TrimStart('+'));
+                        sbdCost.Replace("Parent Cost", strParentCost);
+                        sbdCost.Replace("Parent Gear Cost",
+                                        decTotalParentGearCost.ToString(GlobalSettings.InvariantCultureInfo));
+                        sbdCost.Replace("Gear Cost", decTotalGearCost.ToString(GlobalSettings.InvariantCultureInfo));
+                        sbdCost.Replace("Children Cost",
+                                        decTotalChildrenCost.ToString(GlobalSettings.InvariantCultureInfo));
+                        await sbdCost.CheapReplaceAsync(strCostExpression, "MinRating",
+                                                        async () => (await GetMinRatingAsync(token).ConfigureAwait(false)).ToString(
+                                                            GlobalSettings.InvariantCultureInfo),
+                                                        token: token).ConfigureAwait(false);
+                        sbdCost.Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo));
+                        await (await _objCharacter.GetAttributeSectionAsync(token).ConfigureAwait(false)).ProcessAttributesInXPathAsync(sbdCost, strCostExpression, token: token).ConfigureAwait(false);
+                        string strToEvaluate = sbdCost.ToString();
+                        (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strToEvaluate, token).ConfigureAwait(false);
+                        return blnIsSuccess
+                            ? Convert.ToDecimal((double)objProcess).ToString(GlobalSettings.InvariantCultureInfo)
+                            : strToEvaluate;
+                    }
+                }
+
+                return decReturn.ToString(GlobalSettings.InvariantCultureInfo);
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Total cost of the just the Cyberware itself before we factor in any multipliers.
+        /// </summary>
+        public decimal CalculatedOwnCostPreMultipliers(int intRating, Grade objGrade)
+        {
+            string strReturn = ProcessCostExpression(Cost, intRating, objGrade);
+            decimal.TryParse(strReturn, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decimal decReturn);
+            return decReturn;
         }
 
         /// <summary>
@@ -9082,10 +9272,18 @@ namespace Chummer.Backend.Equipment
                     // If the child cost starts with "*", multiply the item's base cost.
                     if (objChild.Cost.StartsWith('*'))
                     {
-                        decimal decPluginCost =
-                            decCost * (Convert.ToDecimal(objChild.Cost.TrimStart('*'),
-                                                         GlobalSettings.InvariantCultureInfo) - 1);
-
+                        decimal decPluginCost = decCost;
+                        string strChildCost = objChild.ProcessCostExpression(objChild.Cost.TrimStartOnce('*'),
+                            objChild.Rating, objChild.Grade);
+                        if (strChildCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decChildCost))
+                        {
+                            string strToEvaluate = '(' + decPluginCost.ToString(GlobalSettings.InvariantCultureInfo) + ") * ((" + strChildCost + ") - 1)";
+                            (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strToEvaluate);
+                            if (blnIsSuccess)
+                                decPluginCost = Convert.ToDecimal((double)objProcess);
+                        }
+                        else
+                            decPluginCost *= decChildCost - 1.0m;
                         if (objChild.DiscountCost)
                             decPluginCost *= 0.9m;
 
@@ -9108,85 +9306,10 @@ namespace Chummer.Backend.Equipment
         /// </summary>
         public async Task<decimal> CalculatedOwnCostPreMultipliersAsync(int intRating, Grade objGrade, CancellationToken token = default)
         {
-            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
-            try
-            {
-                token.ThrowIfCancellationRequested();
-                string strCostExpression = Cost;
-
-                if (strCostExpression.StartsWith("FixedValues(", StringComparison.Ordinal))
-                {
-                    string strSuffix = string.Empty;
-                    if (!strCostExpression.EndsWith(')'))
-                    {
-                        strSuffix = strCostExpression.Substring(strCostExpression.LastIndexOf(')') + 1);
-                        strCostExpression = strCostExpression.TrimEndOnce(strSuffix);
-                    }
-
-                    string[] strValues = strCostExpression.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                                                          .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    strCostExpression = strValues[Math.Max(Math.Min(intRating, strValues.Length) - 1, 0)]
-                        .Trim('[', ']');
-                    strCostExpression += strSuffix;
-                }
-
-                string strParentCost = "0";
-                decimal decTotalParentGearCost = 0;
-                if (_objParent != null)
-                {
-                    if (strCostExpression.Contains("Parent Cost"))
-                        strParentCost = _objParent.Cost;
-                    if (strCostExpression.Contains("Parent Gear Cost"))
-                        decTotalParentGearCost += await (await _objParent.GetGearChildrenAsync(token).ConfigureAwait(false)).SumAsync(loopGear => loopGear.GetCalculatedCostAsync(token), token).ConfigureAwait(false);
-                }
-
-                decimal decTotalGearCost = 0;
-                if (strCostExpression.Contains("Gear Cost"))
-                {
-                    decTotalGearCost += await (await GetGearChildrenAsync(token).ConfigureAwait(false)).SumAsync(loopGear => loopGear.GetCalculatedCostAsync(token), token).ConfigureAwait(false);
-                }
-
-                decimal decTotalChildrenCost = 0;
-                if (strCostExpression.Contains("Children Cost"))
-                {
-                    decTotalChildrenCost += await (await GetChildrenAsync(token).ConfigureAwait(false))
-                        .SumAsync(
-                            async x => await x.CalculatedTotalCostAsync(await x.GetRatingAsync(token).ConfigureAwait(false), objGrade, token).ConfigureAwait(false),
-                            token).ConfigureAwait(false);
-                }
-
-                if (string.IsNullOrEmpty(strCostExpression))
-                    return 0;
-
-                if (strCostExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decReturn))
-                {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
-                    {
-                        sbdCost.Append(strCostExpression.TrimStart('+'));
-                        sbdCost.Replace("Parent Cost", strParentCost);
-                        sbdCost.Replace("Parent Gear Cost",
-                                        decTotalParentGearCost.ToString(GlobalSettings.InvariantCultureInfo));
-                        sbdCost.Replace("Gear Cost", decTotalGearCost.ToString(GlobalSettings.InvariantCultureInfo));
-                        sbdCost.Replace("Children Cost",
-                                        decTotalChildrenCost.ToString(GlobalSettings.InvariantCultureInfo));
-                        await sbdCost.CheapReplaceAsync(strCostExpression, "MinRating",
-                                                        async () => (await GetMinRatingAsync(token).ConfigureAwait(false)).ToString(
-                                                            GlobalSettings.InvariantCultureInfo),
-                                                        token: token).ConfigureAwait(false);
-                        sbdCost.Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo));
-                        await (await _objCharacter.GetAttributeSectionAsync(token).ConfigureAwait(false)).ProcessAttributesInXPathAsync(sbdCost, strCostExpression, token: token).ConfigureAwait(false);
-                        (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(sbdCost.ToString(), token).ConfigureAwait(false);
-                        if (blnIsSuccess)
-                            decReturn = Convert.ToDecimal((double)objProcess);
-                    }
-                }
-
-                return decReturn;
-            }
-            finally
-            {
-                await objLocker.DisposeAsync().ConfigureAwait(false);
-            }
+            token.ThrowIfCancellationRequested();
+            string strReturn = await ProcessCostExpressionAsync(Cost, intRating, objGrade, token: token).ConfigureAwait(false);
+            decimal.TryParse(strReturn, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decimal decReturn);
+            return decReturn;
         }
 
         /// <summary>
@@ -9253,9 +9376,19 @@ namespace Chummer.Backend.Equipment
                     // If the child cost starts with "*", multiply the item's base cost.
                     if (objChild.Cost.StartsWith('*'))
                     {
-                        decimal decPluginCost =
-                            decCost * (Convert.ToDecimal(objChild.Cost.TrimStart('*'),
-                                                         GlobalSettings.InvariantCultureInfo) - 1);
+                        decimal decPluginCost = decCost;
+                        string strChildCost = await objChild.ProcessCostExpressionAsync(objChild.Cost.TrimStartOnce('*'),
+                            await objChild.GetRatingAsync(token).ConfigureAwait(false),
+                            await objChild.GetGradeAsync(token).ConfigureAwait(false), token: token).ConfigureAwait(false);
+                        if (strChildCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decChildCost))
+                        {
+                            string strToEvaluate = '(' + decPluginCost.ToString(GlobalSettings.InvariantCultureInfo) + ") * ((" + strChildCost + ") - 1)";
+                            (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strToEvaluate, token).ConfigureAwait(false);
+                            if (blnIsSuccess)
+                                decPluginCost = Convert.ToDecimal((double)objProcess);
+                        }
+                        else
+                            decPluginCost *= decChildCost - 1.0m;
 
                         if (objChild.DiscountCost)
                             decPluginCost *= 0.9m;
@@ -9312,9 +9445,18 @@ namespace Chummer.Backend.Equipment
                     {
                         if (objChild.Stolen == blnStolen)
                         {
-                            decimal decPluginCost =
-                                decCost.Value * (Convert.ToDecimal(objChild.Cost.TrimStart('*'),
-                                                                   GlobalSettings.InvariantCultureInfo) - 1);
+                            decimal decPluginCost = decCost.Value;
+                            string strChildCost = objChild.ProcessCostExpression(objChild.Cost.TrimStartOnce('*'),
+                                objChild.Rating, objChild.Grade);
+                            if (strChildCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decChildCost))
+                            {
+                                string strToEvaluate = '(' + decPluginCost.ToString(GlobalSettings.InvariantCultureInfo) + ") * ((" + strChildCost + ") - 1)";
+                                (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strToEvaluate);
+                                if (blnIsSuccess)
+                                    decPluginCost = Convert.ToDecimal((double)objProcess);
+                            }
+                            else
+                                decPluginCost *= decChildCost - 1.0m;
 
                             if (objChild.DiscountCost)
                                 decPluginCost *= 0.9m;
@@ -9380,11 +9522,19 @@ namespace Chummer.Backend.Equipment
                     {
                         if (objChild.Stolen != blnStolen)
                             return 0;
-                        decimal decPluginCost =
-                            await decCost.GetValueAsync(token).ConfigureAwait(false) * (Convert.ToDecimal(
-                                objChild.Cost.TrimStart('*'),
-                                GlobalSettings.InvariantCultureInfo) - 1);
-
+                        decimal decPluginCost = await decCost.GetValueAsync(token).ConfigureAwait(false);
+                        string strChildCost = await objChild.ProcessCostExpressionAsync(objChild.Cost.TrimStartOnce('*'),
+                            await objChild.GetRatingAsync(token).ConfigureAwait(false),
+                            await objChild.GetGradeAsync(token).ConfigureAwait(false), token: token).ConfigureAwait(false);
+                        if (strChildCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decChildCost))
+                        {
+                            string strToEvaluate = '(' + decPluginCost.ToString(GlobalSettings.InvariantCultureInfo) + ") * ((" + strChildCost + ") - 1)";
+                            (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strToEvaluate, token).ConfigureAwait(false);
+                            if (blnIsSuccess)
+                                decPluginCost = Convert.ToDecimal((double)objProcess);
+                        }
+                        else
+                            decPluginCost *= decChildCost - 1.0m;
                         if (objChild.DiscountCost)
                             decPluginCost *= 0.9m;
 
@@ -9528,10 +9678,7 @@ namespace Chummer.Backend.Equipment
                         strWeightExpression = strWeightExpression.TrimEndOnce(strSuffix);
                     }
 
-                    string[] strValues = strWeightExpression.TrimStartOnce("FixedValues(", true).TrimEndOnce(')')
-                                                            .Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    strWeightExpression = strValues[Math.Max(Math.Min(intRating, strValues.Length) - 1, 0)]
-                        .Trim('[', ']');
+                    strWeightExpression = strWeightExpression.ProcessFixedValuesString(intRating);
                     strWeightExpression += strSuffix;
                 }
 
@@ -9543,24 +9690,24 @@ namespace Chummer.Backend.Equipment
                         strParentWeight = _objParent.Weight;
                     if (strWeightExpression.Contains("Parent Gear Weight"))
                         decTotalParentGearWeight
-                            += _objParent.GearChildren.Sum(loopGear => loopGear.OwnWeight * loopGear.Quantity);
+                            = _objParent.GearChildren.Sum(loopGear => loopGear.OwnWeight * loopGear.Quantity);
                 }
 
                 decimal decTotalGearWeight = 0;
                 if (GearChildren.Count > 0 && strWeightExpression.Contains("Gear Weight"))
                 {
-                    decTotalGearWeight += GearChildren.Sum(loopGear => loopGear.OwnWeight * loopGear.Quantity);
+                    decTotalGearWeight = GearChildren.Sum(loopGear => loopGear.OwnWeight * loopGear.Quantity);
                 }
 
                 decimal decTotalChildrenWeight = 0;
                 if (Children.Count > 0 && strWeightExpression.Contains("Children Weight"))
                 {
                     decTotalChildrenWeight
-                        += Children.Sum(loopWare => loopWare.CalculatedTotalWeight(loopWare.Rating, objGrade));
+                        = Children.Sum(loopWare => loopWare.CalculatedTotalWeight(loopWare.Rating, objGrade));
                 }
 
                 decimal decReturn = 0;
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdWeight))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdWeight))
                 {
                     sbdWeight.Append(strWeightExpression.TrimStart('+'));
                     sbdWeight.Replace("Parent Weight", strParentWeight);
@@ -9655,9 +9802,8 @@ namespace Chummer.Backend.Equipment
                                       - Children.Sum(objChildCyberware =>
                                       {
                                           // Children that are built into the parent
-                                          if (objChildCyberware.PlugsIntoModularMount == HasModularMount &&
-                                              !string.IsNullOrWhiteSpace(HasModularMount) ||
-                                              objChildCyberware.ParentID == InternalId)
+                                          if (objChildCyberware.PlugsIntoTargetCyberware(this)
+                                              || objChildCyberware.ParentID == InternalId)
                                               return 0;
                                           string strCapacity = objChildCyberware.CalculatedCapacity;
                                           int intPos = strCapacity.IndexOf("/[", StringComparison.Ordinal);
@@ -9695,9 +9841,8 @@ namespace Chummer.Backend.Equipment
                                       // Run through its Children and deduct the Capacity costs.
                                       - Children.Sum(objChildCyberware =>
                                       {
-                                          if (objChildCyberware.PlugsIntoModularMount == HasModularMount &&
-                                              !string.IsNullOrWhiteSpace(HasModularMount) ||
-                                              objChildCyberware.ParentID == InternalId)
+                                          if (objChildCyberware.PlugsIntoTargetCyberware(this)
+                                              || objChildCyberware.ParentID == InternalId)
                                               return 0;
                                           string strCapacity = objChildCyberware.CalculatedCapacity;
                                           int intPos = strCapacity.IndexOf("/[", StringComparison.Ordinal);
@@ -9747,7 +9892,6 @@ namespace Chummer.Backend.Equipment
                 token.ThrowIfCancellationRequested();
                 if (Capacity.Contains("/["))
                 {
-                    string strHasModularMount = await GetHasModularMountAsync(token).ConfigureAwait(false);
                     // Get the Cyberware base Capacity.
                     string strBaseCapacity = await GetCalculatedCapacityAsync(token).ConfigureAwait(false);
                     strBaseCapacity = strBaseCapacity.Substring(0, strBaseCapacity.IndexOf('/'));
@@ -9756,9 +9900,8 @@ namespace Chummer.Backend.Equipment
                                   - await (await GetChildrenAsync(token).ConfigureAwait(false)).SumAsync(async objChildCyberware =>
                                   {
                                       // Children that are built into the parent
-                                      if (await objChildCyberware.GetPlugsIntoModularMountAsync(token).ConfigureAwait(false) == strHasModularMount &&
-                                          !string.IsNullOrWhiteSpace(strHasModularMount) ||
-                                          objChildCyberware.ParentID == InternalId)
+                                      if (await objChildCyberware.PlugsIntoTargetCyberwareAsync(this, token).ConfigureAwait(false)
+                                          || objChildCyberware.ParentID == InternalId)
                                           return 0;
                                       string strCapacity = await objChildCyberware.GetCalculatedCapacityAsync(token).ConfigureAwait(false);
                                       int intPos = strCapacity.IndexOf("/[", StringComparison.Ordinal);
@@ -9791,15 +9934,13 @@ namespace Chummer.Backend.Equipment
                 }
                 else if (!Capacity.Contains('['))
                 {
-                    string strHasModularMount = await GetHasModularMountAsync(token).ConfigureAwait(false);
                     // Get the Cyberware base Capacity.
                     decCapacity = Convert.ToDecimal(await GetCalculatedCapacityAsync(token).ConfigureAwait(false), GlobalSettings.CultureInfo)
                                   // Run through its Children and deduct the Capacity costs.
                                   - await (await GetChildrenAsync(token).ConfigureAwait(false)).SumAsync(async objChildCyberware =>
                                   {
-                                      if (await objChildCyberware.GetPlugsIntoModularMountAsync(token).ConfigureAwait(false) == strHasModularMount &&
-                                          !string.IsNullOrWhiteSpace(strHasModularMount) ||
-                                          objChildCyberware.ParentID == InternalId)
+                                      if (await objChildCyberware.PlugsIntoTargetCyberwareAsync(this, token).ConfigureAwait(false)
+                                          || objChildCyberware.ParentID == InternalId)
                                           return 0;
                                       string strCapacity = await objChildCyberware.GetCalculatedCapacityAsync(token).ConfigureAwait(false);
                                       int intPos = strCapacity.IndexOf("/[", StringComparison.Ordinal);
@@ -10534,9 +10675,8 @@ namespace Chummer.Backend.Equipment
             {
                 using (LockObject.EnterReadLock())
                 {
-                    int intBonusBoxes = Children.Sum(x => x.TotalBonusMatrixBoxes)
-                                        + GearChildren.Sum(x => x.Equipped, x => x.TotalBonusMatrixBoxes);
-                    return intBonusBoxes;
+                    return Children.Sum(x => x.TotalBonusMatrixBoxes)
+                        + GearChildren.Sum(x => x.Equipped, x => x.TotalBonusMatrixBoxes);
                 }
             }
         }
@@ -11300,7 +11440,7 @@ namespace Chummer.Backend.Equipment
             {
                 token.ThrowIfCancellationRequested();
                 if (!string.IsNullOrEmpty(ParentID) && !string.IsNullOrEmpty(Source) &&
-                    !await _objCharacter.Settings.BookEnabledAsync(Source, token).ConfigureAwait(false))
+                    !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).BookEnabledAsync(Source, token).ConfigureAwait(false))
                     return null;
 
                 TreeNode objNode = new TreeNode
@@ -11309,8 +11449,8 @@ namespace Chummer.Backend.Equipment
                     Text = await GetCurrentDisplayNameAsync(token).ConfigureAwait(false),
                     Tag = this,
                     ContextMenuStrip = cmsCyberware,
-                    ForeColor = PreferredColor,
-                    ToolTipText = Notes.WordWrap()
+                    ForeColor = await GetPreferredColorAsync(token).ConfigureAwait(false),
+                    ToolTipText = (await GetNotesAsync(token).ConfigureAwait(false)).WordWrap()
                 };
 
                 TreeNodeCollection lstChildNodes = objNode.Nodes;
@@ -11356,6 +11496,28 @@ namespace Chummer.Backend.Equipment
                         ? ColorManager.GrayText
                         : ColorManager.WindowText;
                 }
+            }
+        }
+
+        public async Task<Color> GetPreferredColorAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (!string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
+                {
+                    return !string.IsNullOrEmpty(ParentID)
+                        ? ColorManager.GenerateCurrentModeDimmedColor(await GetNotesColorAsync(token).ConfigureAwait(false))
+                        : ColorManager.GenerateCurrentModeColor(await GetNotesColorAsync(token).ConfigureAwait(false));
+                }
+                return !string.IsNullOrEmpty(ParentID)
+                    ? ColorManager.GrayText
+                    : ColorManager.WindowText;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -11589,106 +11751,24 @@ namespace Chummer.Backend.Equipment
                     if (xmlCyberwareDataNode == null)
                     {
                         string[] astrOriginalNameSplit
-                            = strOriginalName.Split(':', StringSplitOptions.RemoveEmptyEntries);
-                        if (astrOriginalNameSplit.Length > 1)
+                            = strOriginalName.SplitFixedSizePooledArray(':', 2, StringSplitOptions.RemoveEmptyEntries);
+                        try
                         {
-                            string strName = astrOriginalNameSplit[0].Trim();
-                            blnCyberware = true;
-                            using (XmlNodeList xmlCyberwareNodeList
-                                   = xmlCyberwareDocument.SelectNodes(
-                                       "/chummer/cyberwares/cyberware[contains(name, " + strName.CleanXPath() + ")]"))
-                            {
-                                if (xmlCyberwareNodeList != null)
-                                {
-                                    foreach (XmlNode xmlLoopNode in xmlCyberwareNodeList)
-                                    {
-                                        XPathNavigator xmlTestNode = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("forbidden/parentdetails");
-                                        if (xmlTestNode != null
-                                            && xmlParentCyberwareNode.ProcessFilterOperationNode(xmlTestNode, false))
-                                        {
-                                            // Assumes topmost parent is an AND node
-                                            continue;
-                                        }
-
-                                        xmlTestNode = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("required/parentdetails");
-                                        if (xmlTestNode != null
-                                            && !xmlParentCyberwareNode.ProcessFilterOperationNode(xmlTestNode, false))
-                                        {
-                                            // Assumes topmost parent is an AND node
-                                            continue;
-                                        }
-
-                                        xmlCyberwareDataNode = xmlLoopNode;
-                                        break;
-                                    }
-
-                                    if (xmlCyberwareDataNode != null)
-                                        strForceValue = astrOriginalNameSplit[1].Trim();
-                                    else
-                                    {
-                                        blnCyberware = false;
-                                        using (XmlNodeList xmlCyberwareNodeList2 = xmlBiowareDocument.SelectNodes(
-                                                   "/chummer/biowares/bioware[contains(name, " + strName.CleanXPath()
-                                                   + ")]"))
-                                        {
-                                            if (xmlCyberwareNodeList2 != null)
-                                            {
-                                                foreach (XmlNode xmlLoopNode in xmlCyberwareNodeList2)
-                                                {
-                                                    XPathNavigator xmlTestNode
-                                                        = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("forbidden/parentdetails");
-                                                    if (xmlTestNode != null
-                                                        && xmlParentCyberwareNode
-                                                            .ProcessFilterOperationNode(xmlTestNode, false))
-                                                    {
-                                                        // Assumes topmost parent is an AND node
-                                                        continue;
-                                                    }
-
-                                                    xmlTestNode = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator(
-                                                        "required/parentdetails");
-                                                    if (xmlTestNode != null
-                                                        && !xmlParentCyberwareNode.ProcessFilterOperationNode(
-                                                            xmlTestNode, false))
-                                                    {
-                                                        // Assumes topmost parent is an AND node
-                                                        continue;
-                                                    }
-
-                                                    xmlCyberwareDataNode = xmlLoopNode;
-                                                    break;
-                                                }
-                                            }
-                                        }
-
-                                        if (xmlCyberwareDataNode != null)
-                                            strForceValue = astrOriginalNameSplit[1].Trim();
-                                    }
-                                }
-                            }
-                        }
-
-                        if (xmlCyberwareDataNode == null)
-                        {
-                            astrOriginalNameSplit = strOriginalName.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                            if (astrOriginalNameSplit.Length > 1)
+                            if (!string.IsNullOrEmpty(astrOriginalNameSplit[1]))
                             {
                                 string strName = astrOriginalNameSplit[0].Trim();
                                 blnCyberware = true;
                                 using (XmlNodeList xmlCyberwareNodeList
                                        = xmlCyberwareDocument.SelectNodes(
-                                           "/chummer/cyberwares/cyberware[contains(name, " + strName.CleanXPath()
-                                           + ")]"))
+                                           "/chummer/cyberwares/cyberware[contains(name, " + strName.CleanXPath() + ")]"))
                                 {
                                     if (xmlCyberwareNodeList != null)
                                     {
                                         foreach (XmlNode xmlLoopNode in xmlCyberwareNodeList)
                                         {
-                                            XPathNavigator xmlTestNode
-                                                = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("forbidden/parentdetails");
+                                            XPathNavigator xmlTestNode = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("forbidden/parentdetails");
                                             if (xmlTestNode != null
-                                                && xmlParentCyberwareNode
-                                                    .ProcessFilterOperationNode(xmlTestNode, false))
+                                                && xmlParentCyberwareNode.ProcessFilterOperationNode(xmlTestNode, false))
                                             {
                                                 // Assumes topmost parent is an AND node
                                                 continue;
@@ -11696,8 +11776,7 @@ namespace Chummer.Backend.Equipment
 
                                             xmlTestNode = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("required/parentdetails");
                                             if (xmlTestNode != null
-                                                && !xmlParentCyberwareNode.ProcessFilterOperationNode(
-                                                    xmlTestNode, false))
+                                                && !xmlParentCyberwareNode.ProcessFilterOperationNode(xmlTestNode, false))
                                             {
                                                 // Assumes topmost parent is an AND node
                                                 continue;
@@ -11713,19 +11792,18 @@ namespace Chummer.Backend.Equipment
                                         {
                                             blnCyberware = false;
                                             using (XmlNodeList xmlCyberwareNodeList2 = xmlBiowareDocument.SelectNodes(
-                                                       "/chummer/biowares/bioware[contains(name, "
-                                                       + strName.CleanXPath()
+                                                       "/chummer/biowares/bioware[contains(name, " + strName.CleanXPath()
                                                        + ")]"))
                                             {
                                                 if (xmlCyberwareNodeList2 != null)
                                                 {
                                                     foreach (XmlNode xmlLoopNode in xmlCyberwareNodeList2)
                                                     {
-                                                        XPathNavigator xmlTestNode =
-                                                            xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("forbidden/parentdetails");
+                                                        XPathNavigator xmlTestNode
+                                                            = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("forbidden/parentdetails");
                                                         if (xmlTestNode != null
-                                                            && xmlParentCyberwareNode.ProcessFilterOperationNode(
-                                                                xmlTestNode, false))
+                                                            && xmlParentCyberwareNode
+                                                                .ProcessFilterOperationNode(xmlTestNode, false))
                                                         {
                                                             // Assumes topmost parent is an AND node
                                                             continue;
@@ -11746,9 +11824,107 @@ namespace Chummer.Backend.Equipment
                                                     }
                                                 }
                                             }
+
+                                            if (xmlCyberwareDataNode != null)
+                                                strForceValue = astrOriginalNameSplit[1].Trim();
                                         }
                                     }
                                 }
+                            }
+                        }
+                        finally
+                        {
+                            ArrayPool<string>.Shared.Return(astrOriginalNameSplit);
+                        }
+
+                        if (xmlCyberwareDataNode == null)
+                        {
+                            astrOriginalNameSplit = strOriginalName.SplitFixedSizePooledArray(',', 2, StringSplitOptions.RemoveEmptyEntries);
+                            try
+                            {
+                                if (!string.IsNullOrEmpty(astrOriginalNameSplit[1]))
+                                {
+                                    string strName = astrOriginalNameSplit[0].Trim();
+                                    blnCyberware = true;
+                                    using (XmlNodeList xmlCyberwareNodeList
+                                           = xmlCyberwareDocument.SelectNodes(
+                                               "/chummer/cyberwares/cyberware[contains(name, " + strName.CleanXPath()
+                                               + ")]"))
+                                    {
+                                        if (xmlCyberwareNodeList != null)
+                                        {
+                                            foreach (XmlNode xmlLoopNode in xmlCyberwareNodeList)
+                                            {
+                                                XPathNavigator xmlTestNode
+                                                    = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("forbidden/parentdetails");
+                                                if (xmlTestNode != null
+                                                    && xmlParentCyberwareNode
+                                                        .ProcessFilterOperationNode(xmlTestNode, false))
+                                                {
+                                                    // Assumes topmost parent is an AND node
+                                                    continue;
+                                                }
+
+                                                xmlTestNode = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("required/parentdetails");
+                                                if (xmlTestNode != null
+                                                    && !xmlParentCyberwareNode.ProcessFilterOperationNode(
+                                                        xmlTestNode, false))
+                                                {
+                                                    // Assumes topmost parent is an AND node
+                                                    continue;
+                                                }
+
+                                                xmlCyberwareDataNode = xmlLoopNode;
+                                                break;
+                                            }
+
+                                            if (xmlCyberwareDataNode != null)
+                                                strForceValue = astrOriginalNameSplit[1].Trim();
+                                            else
+                                            {
+                                                blnCyberware = false;
+                                                using (XmlNodeList xmlCyberwareNodeList2 = xmlBiowareDocument.SelectNodes(
+                                                           "/chummer/biowares/bioware[contains(name, "
+                                                           + strName.CleanXPath()
+                                                           + ")]"))
+                                                {
+                                                    if (xmlCyberwareNodeList2 != null)
+                                                    {
+                                                        foreach (XmlNode xmlLoopNode in xmlCyberwareNodeList2)
+                                                        {
+                                                            XPathNavigator xmlTestNode =
+                                                                xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator("forbidden/parentdetails");
+                                                            if (xmlTestNode != null
+                                                                && xmlParentCyberwareNode.ProcessFilterOperationNode(
+                                                                    xmlTestNode, false))
+                                                            {
+                                                                // Assumes topmost parent is an AND node
+                                                                continue;
+                                                            }
+
+                                                            xmlTestNode = xmlLoopNode.SelectSingleNodeAndCacheExpressionAsNavigator(
+                                                                "required/parentdetails");
+                                                            if (xmlTestNode != null
+                                                                && !xmlParentCyberwareNode.ProcessFilterOperationNode(
+                                                                    xmlTestNode, false))
+                                                            {
+                                                                // Assumes topmost parent is an AND node
+                                                                continue;
+                                                            }
+
+                                                            xmlCyberwareDataNode = xmlLoopNode;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            finally
+                            {
+                                ArrayPool<string>.Shared.Return(astrOriginalNameSplit);
                             }
                         }
                     }
@@ -12444,9 +12620,9 @@ namespace Chummer.Backend.Equipment
                 if (string.IsNullOrEmpty(await objCyberware.GetHasModularMountAsync(token).ConfigureAwait(false)) &&
                     string.IsNullOrEmpty(await objCyberware.GetBlocksMountsAsync(token).ConfigureAwait(false)))
                     return true;
-                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                            out HashSet<string> setDisallowedMounts))
-                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                            out HashSet<string> setHasMounts))
                 {
                     foreach (string strLoop in (await objCyberware.GetBlocksMountsAsync(token).ConfigureAwait(false)).SplitNoAlloc(','))

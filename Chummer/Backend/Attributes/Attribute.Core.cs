@@ -1597,12 +1597,11 @@ namespace Chummer.Backend.Attributes
                 int intPureCyberValue = 0;
                 int intLimbCount = 0;
                 // If this is AGI or STR, factor in any Cyberlimbs.
-                if (blnIncludeCyberlimbs &&
-                    !(blnSync
-                            ? _objCharacter.Settings
-                            : await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false))
-                        .DontUseCyberlimbCalculation &&
-                    Cyberware.CyberlimbAttributeAbbrevs.Contains(Abbrev))
+                if (blnIncludeCyberlimbs
+                    && !(blnSync
+                            ? _objCharacter.Settings.DontUseCyberlimbCalculation
+                            : await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetDontUseCyberlimbCalculationAsync(token).ConfigureAwait(false))
+                    && Cyberware.CyberlimbAttributeAbbrevs.Contains(Abbrev))
                 {
                     int intLimbTotal;
                     if (blnSync)
@@ -2404,7 +2403,7 @@ namespace Chummer.Backend.Attributes
 
                     string strSpace = LanguageManager.GetString("String_Space");
 
-                    using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                    using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                     out HashSet<string> setUniqueNames))
                     {
                         decimal decBaseValue = 0;
@@ -2416,7 +2415,7 @@ namespace Chummer.Backend.Attributes
                         List<Tuple<string, decimal, string>> lstUniquePair =
                             new List<Tuple<string, decimal, string>>(lstUsedImprovements.Count);
 
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                       out StringBuilder sbdModifier))
                         {
                             foreach (Improvement objImprovement in lstUsedImprovements.Where(
@@ -2459,7 +2458,7 @@ namespace Chummer.Backend.Attributes
                                 // Run through the list of UniqueNames and pick out the highest value for each one.
                                 decimal decHighest = decimal.MinValue;
 
-                                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                               out StringBuilder sbdNewModifier))
                                 {
                                     foreach ((string strGroupName, decimal decValue, string strSourceName) in
@@ -2500,7 +2499,7 @@ namespace Chummer.Backend.Attributes
                             else if (setUniqueNames.Contains("precedence1"))
                             {
                                 // Retrieve all the items that are precedence1 and nothing else.
-                                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                               out StringBuilder sbdNewModifier))
                                 {
                                     foreach ((string _, decimal decValue, string strSourceName) in lstUniquePair
@@ -2642,7 +2641,7 @@ namespace Chummer.Backend.Attributes
 
                 string strSpace = await LanguageManager.GetStringAsync("String_Space", token: token).ConfigureAwait(false);
 
-                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                 out HashSet<string> setUniqueNames))
                 {
                     decimal decBaseValue = 0;
@@ -2654,7 +2653,7 @@ namespace Chummer.Backend.Attributes
                     List<Tuple<string, decimal, string>> lstUniquePair =
                         new List<Tuple<string, decimal, string>>(lstUsedImprovements.Count);
 
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                   out StringBuilder sbdModifier))
                     {
                         foreach (Improvement objImprovement in lstUsedImprovements.Where(
@@ -2698,7 +2697,7 @@ namespace Chummer.Backend.Attributes
                             // Run through the list of UniqueNames and pick out the highest value for each one.
                             decimal decHighest = decimal.MinValue;
 
-                            using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                           out StringBuilder sbdNewModifier))
                             {
                                 foreach ((string strGroupName, decimal decValue, string strSourceName) in
@@ -2741,7 +2740,7 @@ namespace Chummer.Backend.Attributes
                         else if (setUniqueNames.Contains("precedence1"))
                         {
                             // Retrieve all the items that are precedence1 and nothing else.
-                            using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                           out StringBuilder sbdNewModifier))
                             {
                                 foreach ((string _, decimal decValue, string strSourceName) in lstUniquePair
@@ -2834,7 +2833,7 @@ namespace Chummer.Backend.Attributes
                         }
 
                         //// If this is AGI or STR, factor in any Cyberlimbs.
-                        if (!_objCharacter.Settings.DontUseCyberlimbCalculation &&
+                        if (!await _objCharacter.Settings.GetDontUseCyberlimbCalculationAsync(token).ConfigureAwait(false) &&
                             Cyberware.CyberlimbAttributeAbbrevs.Contains(Abbrev))
                         {
                             await _objCharacter.Cyberware.ForEachAsync(objCyberware => BuildTooltip(sbdModifier, objCyberware, strSpace), token: token).ConfigureAwait(false);
@@ -3157,7 +3156,7 @@ namespace Chummer.Backend.Attributes
                 }
 
                 int intUpgradeCost;
-                int intOptionsCost = _objCharacter.Settings.KarmaAttribute;
+                int intOptionsCost = await _objCharacter.Settings.GetKarmaAttributeAsync(token).ConfigureAwait(false);
                 if (intValue == 0)
                 {
                     intUpgradeCost = intOptionsCost;
@@ -3167,7 +3166,7 @@ namespace Chummer.Backend.Attributes
                     intUpgradeCost = (intValue + 1) * intOptionsCost;
                 }
 
-                if (_objCharacter.Settings.AlternateMetatypeAttributeKarma
+                if (await _objCharacter.Settings.GetAlternateMetatypeAttributeKarmaAsync(token).ConfigureAwait(false)
                     && !s_SetAlternateMetatypeAttributeKarmaExceptions.Contains(Abbrev))
                     intUpgradeCost -= (await GetMetatypeMinimumAsync(token).ConfigureAwait(false) - 1) *
                                       intOptionsCost;

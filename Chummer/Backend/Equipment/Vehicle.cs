@@ -18,6 +18,7 @@
  */
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -267,11 +268,18 @@ namespace Chummer.Backend.Equipment
                 //Some vehicles have different Offroad Handling speeds. If so, we want to split this up for use with mods and such later.
                 if (strTemp.Contains('/'))
                 {
-                    string[] strHandlingArray = strTemp.Split('/');
-                    if (!int.TryParse(strHandlingArray[0], out _intHandling))
-                        _intHandling = 0;
-                    if (!int.TryParse(strHandlingArray[1], out _intOffroadHandling))
-                        _intOffroadHandling = 0;
+                    string[] strHandlingArray = strTemp.SplitFixedSizePooledArray('/', 2);
+                    try
+                    {
+                        if (!int.TryParse(strHandlingArray[0], out _intHandling))
+                            _intHandling = 0;
+                        if (!int.TryParse(strHandlingArray[1], out _intOffroadHandling))
+                            _intOffroadHandling = 0;
+                    }
+                    finally
+                    {
+                        ArrayPool<string>.Shared.Return(strHandlingArray);
+                    }
                 }
                 else
                 {
@@ -285,11 +293,18 @@ namespace Chummer.Backend.Equipment
             {
                 if (strTemp.Contains('/'))
                 {
-                    string[] strAccelArray = strTemp.Split('/');
-                    if (!int.TryParse(strAccelArray[0], out _intAccel))
-                        _intAccel = 0;
-                    if (!int.TryParse(strAccelArray[1], out _intOffroadAccel))
-                        _intOffroadAccel = 0;
+                    string[] strAccelArray = strTemp.SplitFixedSizePooledArray('/', 2);
+                    try
+                    {
+                        if (!int.TryParse(strAccelArray[0], out _intAccel))
+                            _intAccel = 0;
+                        if (!int.TryParse(strAccelArray[1], out _intOffroadAccel))
+                            _intOffroadAccel = 0;
+                    }
+                    finally
+                    {
+                        ArrayPool<string>.Shared.Return(strAccelArray);
+                    }
                 }
                 else
                 {
@@ -303,11 +318,18 @@ namespace Chummer.Backend.Equipment
             {
                 if (strTemp.Contains('/'))
                 {
-                    string[] strSpeedArray = strTemp.Split('/');
-                    if (!int.TryParse(strSpeedArray[0], out _intSpeed))
-                        _intSpeed = 0;
-                    if (!int.TryParse(strSpeedArray[1], out _intOffroadSpeed))
-                        _intOffroadSpeed = 0;
+                    string[] strSpeedArray = strTemp.SplitFixedSizePooledArray('/', 2);
+                    try
+                    {
+                        if (!int.TryParse(strSpeedArray[0], out _intSpeed))
+                            _intSpeed = 0;
+                        if (!int.TryParse(strSpeedArray[1], out _intOffroadSpeed))
+                            _intOffroadSpeed = 0;
+                    }
+                    finally
+                    {
+                        ArrayPool<string>.Shared.Return(strSpeedArray);
+                    }
                 }
                 else
                 {
@@ -400,8 +422,9 @@ namespace Chummer.Backend.Equipment
                                 GlobalSettings.CultureInfo,
                                 await LanguageManager.GetStringAsync("String_SelectVariableCost", token: token).ConfigureAwait(false),
                                 await GetCurrentDisplayNameShortAsync(token).ConfigureAwait(false));
+                            int intDecimalPlaces = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMaxNuyenDecimalsAsync(token).ConfigureAwait(false);
                             using (ThreadSafeForm<SelectNumber> frmPickNumber
-                                   = await ThreadSafeForm<SelectNumber>.GetAsync(() => new SelectNumber(_objCharacter.Settings.MaxNuyenDecimals)
+                                   = await ThreadSafeForm<SelectNumber>.GetAsync(() => new SelectNumber(intDecimalPlaces)
                                    {
                                        Minimum = decMin,
                                        Maximum = decMax,
@@ -441,9 +464,9 @@ namespace Chummer.Backend.Equipment
                         // ReSharper disable once MethodHasAsyncOverloadWithCancellation
                         Page, DisplayPage(GlobalSettings.Language), _objCharacter, token);
                 else
-                    Notes = await CommonFunctions.GetBookNotesAsync(objXmlVehicle, Name,
+                    await SetNotesAsync(await CommonFunctions.GetBookNotesAsync(objXmlVehicle, Name,
                         await GetCurrentDisplayNameAsync(token).ConfigureAwait(false), Source, Page,
-                        await DisplayPageAsync(GlobalSettings.Language, token).ConfigureAwait(false), _objCharacter, token).ConfigureAwait(false);
+                        await DisplayPageAsync(GlobalSettings.Language, token).ConfigureAwait(false), _objCharacter, token).ConfigureAwait(false), token).ConfigureAwait(false);
             }
 
             objXmlVehicle.TryGetStringFieldQuickly("devicerating", ref _strDeviceRating);
@@ -457,11 +480,18 @@ namespace Chummer.Backend.Equipment
             else
             {
                 _blnCanSwapAttributes = true;
-                string[] strArray = _strAttributeArray.Split(',');
-                _strAttack = strArray[0];
-                _strSleaze = strArray[1];
-                _strDataProcessing = strArray[2];
-                _strFirewall = strArray[3];
+                string[] strArray = _strAttributeArray.SplitFixedSizePooledArray(',', 4);
+                try
+                {
+                    _strAttack = strArray[0];
+                    _strSleaze = strArray[1];
+                    _strDataProcessing = strArray[2];
+                    _strFirewall = strArray[3];
+                }
+                finally
+                {
+                    ArrayPool<string>.Shared.Return(strArray);
+                }
             }
             objXmlVehicle.TryGetStringFieldQuickly("modattack", ref _strModAttack);
             objXmlVehicle.TryGetStringFieldQuickly("modsleaze", ref _strModSleaze);
@@ -987,9 +1017,16 @@ namespace Chummer.Backend.Equipment
                 //Some vehicles have different Offroad Handling speeds. If so, we want to split this up for use with mods and such later.
                 if (strTemp.Contains('/'))
                 {
-                    string[] lstHandlings = strTemp.Split('/');
-                    int.TryParse(lstHandlings[0], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intHandling);
-                    int.TryParse(lstHandlings[1], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intOffroadHandling);
+                    string[] lstHandlings = strTemp.SplitFixedSizePooledArray('/', 2);
+                    try
+                    {
+                        int.TryParse(lstHandlings[0], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intHandling);
+                        int.TryParse(lstHandlings[1], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intOffroadHandling);
+                    }
+                    finally
+                    {
+                        ArrayPool<string>.Shared.Return(lstHandlings);
+                    }
                 }
                 else
                 {
@@ -1006,9 +1043,16 @@ namespace Chummer.Backend.Equipment
             {
                 if (strTemp.Contains('/'))
                 {
-                    string[] lstAccels = strTemp.Split('/');
-                    int.TryParse(lstAccels[0], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intAccel);
-                    int.TryParse(lstAccels[1], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intOffroadAccel);
+                    string[] lstAccels = strTemp.SplitFixedSizePooledArray('/', 2);
+                    try
+                    {
+                        int.TryParse(lstAccels[0], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intAccel);
+                        int.TryParse(lstAccels[1], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intOffroadAccel);
+                    }
+                    finally
+                    {
+                        ArrayPool<string>.Shared.Return(lstAccels);
+                    }
                 }
                 else
                 {
@@ -1025,9 +1069,16 @@ namespace Chummer.Backend.Equipment
             {
                 if (strTemp.Contains('/'))
                 {
-                    string[] lstSpeeds = strTemp.Split('/');
-                    int.TryParse(lstSpeeds[0], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intSpeed);
-                    int.TryParse(lstSpeeds[1], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intOffroadSpeed);
+                    string[] lstSpeeds = strTemp.SplitFixedSizePooledArray('/', 2);
+                    try
+                    {
+                        int.TryParse(lstSpeeds[0], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intSpeed);
+                        int.TryParse(lstSpeeds[1], NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out _intOffroadSpeed);
+                    }
+                    finally
+                    {
+                        ArrayPool<string>.Shared.Return(lstSpeeds);
+                    }
                 }
                 else
                 {
@@ -1356,11 +1407,12 @@ namespace Chummer.Backend.Equipment
                            .ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("avail", await TotalAvailAsync(objCulture, strLanguageToPrint, token).ConfigureAwait(false), token)
                            .ConfigureAwait(false);
+            string strNuyenFormat = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetNuyenFormatAsync(token).ConfigureAwait(false);
             await objWriter
-                  .WriteElementStringAsync("cost", (await GetTotalCostAsync(token).ConfigureAwait(false)).ToString(_objCharacter.Settings.NuyenFormat, objCulture),
+                  .WriteElementStringAsync("cost", (await GetTotalCostAsync(token).ConfigureAwait(false)).ToString(strNuyenFormat, objCulture),
                                            token).ConfigureAwait(false);
             await objWriter
-                  .WriteElementStringAsync("owncost", (await GetOwnCostAsync(token).ConfigureAwait(false)).ToString(_objCharacter.Settings.NuyenFormat, objCulture),
+                  .WriteElementStringAsync("owncost", (await GetOwnCostAsync(token).ConfigureAwait(false)).ToString(strNuyenFormat, objCulture),
                                            token).ConfigureAwait(false);
             await objWriter
                   .WriteElementStringAsync(
@@ -1433,7 +1485,7 @@ namespace Chummer.Backend.Equipment
             await Weapons.ForEachAsync(x => x.Print(objWriter, objCulture, strLanguageToPrint, token), token).ConfigureAwait(false);
             await objWriter.WriteEndElementAsync().ConfigureAwait(false);
             if (GlobalSettings.PrintNotes)
-                await objWriter.WriteElementStringAsync("notes", Notes, token).ConfigureAwait(false);
+                await objWriter.WriteElementStringAsync("notes", await GetNotesAsync(token).ConfigureAwait(false), token).ConfigureAwait(false);
             await objWriter.WriteEndElementAsync().ConfigureAwait(false);
         }
 
@@ -1661,7 +1713,7 @@ namespace Chummer.Backend.Equipment
         /// <summary>
         /// Matrix Condition Monitor boxes.
         /// </summary>
-        public int MatrixCM => BaseMatrixBoxes + (this.GetTotalMatrixAttribute("Device Rating") + 1) / 2 + TotalBonusMatrixBoxes;
+        public int MatrixCM => BaseMatrixBoxes + this.GetTotalMatrixAttribute("Device Rating").DivAwayFromZero(2) + TotalBonusMatrixBoxes;
 
         /// <summary>
         /// Matrix Condition Monitor boxes filled.
@@ -1694,7 +1746,7 @@ namespace Chummer.Backend.Equipment
         {
             get
             {
-                return BasePhysicalBoxes + (TotalBody + 1) / 2 + Mods.Sum(objMod => objMod?.ConditionMonitor ?? 0);
+                return BasePhysicalBoxes + TotalBody.DivAwayFromZero(2) + Mods.Sum(objMod => objMod?.ConditionMonitor ?? 0);
             }
         }
 
@@ -1856,7 +1908,7 @@ namespace Chummer.Backend.Equipment
 
                 if (strAvail.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
                     {
                         sbdAvail.Append(strAvail.TrimStart('+'));
                         _objCharacter.AttributeSection.ProcessAttributesInXPath(sbdAvail, strAvail);
@@ -1948,7 +2000,7 @@ namespace Chummer.Backend.Equipment
 
                 if (strAvail.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
                     {
                         sbdAvail.Append(strAvail.TrimStart('+'));
                         await (await _objCharacter.GetAttributeSectionAsync(token).ConfigureAwait(false))
@@ -2226,6 +2278,21 @@ namespace Chummer.Backend.Equipment
             set => _strNotes = value;
         }
 
+        public Task<string> GetNotesAsync(CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled<string>(token);
+            return Task.FromResult(_strNotes);
+        }
+
+        public Task SetNotesAsync(string value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            _strNotes = value;
+            return Task.CompletedTask;
+        }
+
         /// <summary>
         /// Forecolor to use for Notes in treeviews.
         /// </summary>
@@ -2233,6 +2300,21 @@ namespace Chummer.Backend.Equipment
         {
             get => _colNotes;
             set => _colNotes = value;
+        }
+
+        public Task<Color> GetNotesColorAsync(CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled<Color>(token);
+            return Task.FromResult(_colNotes);
+        }
+
+        public Task SetNotesColorAsync(Color value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            _colNotes = value;
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -2724,7 +2806,7 @@ namespace Chummer.Backend.Equipment
                 string strCost = Cost;
                 if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decCost))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
                     {
                         sbdCost.Append(strCost);
                         _objCharacter.AttributeSection.ProcessAttributesInXPath(sbdCost, strCost);
@@ -2753,7 +2835,7 @@ namespace Chummer.Backend.Equipment
             string strCost = Cost;
             if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decCost))
             {
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
                 {
                     sbdCost.Append(strCost);
                     await _objCharacter.AttributeSection.ProcessAttributesInXPathAsync(sbdCost, strCost, token: token).ConfigureAwait(false);
@@ -3029,7 +3111,7 @@ namespace Chummer.Backend.Equipment
                                         "OffroadSpeed", false, token)
                                     .ConfigureAwait(false),
                                 intTotalSpeed);
-                    if (IsDrone && _objCharacter.Settings.DroneMods)
+                    if (IsDrone && await _objCharacter.Settings.GetDroneModsAsync(token).ConfigureAwait(false))
                     {
                         strBonus = objMod.Bonus?["armor"]?.InnerText;
                         if (!string.IsNullOrEmpty(strBonus))
@@ -3255,7 +3337,7 @@ namespace Chummer.Backend.Equipment
                                         token)
                                     .ConfigureAwait(false),
                                 intTotalAccel);
-                    if (IsDrone && _objCharacter.Settings.DroneMods)
+                    if (IsDrone && await _objCharacter.Settings.GetDroneModsAsync(token).ConfigureAwait(false))
                     {
                         strBonus = objMod.Bonus?["armor"]?.InnerText;
                         if (!string.IsNullOrEmpty(strBonus))
@@ -3307,7 +3389,7 @@ namespace Chummer.Backend.Equipment
                         intTotalBonusOffroadAccel += await ParseBonusAsync(
                             objMod.WirelessBonus["offroadaccel"]?.InnerText,
                             intRating, intTotalAccel, "OffroadAccel", token: token).ConfigureAwait(false);
-                        if (IsDrone && _objCharacter.Settings.DroneMods)
+                        if (IsDrone && await _objCharacter.Settings.GetDroneModsAsync(token).ConfigureAwait(false))
                             intTemp += await ParseBonusAsync(objMod.WirelessBonus["armor"]?.InnerText, intRating,
                                 intTotalArmor, "Armor", token: token).ConfigureAwait(false);
                     }
@@ -3969,7 +4051,7 @@ namespace Chummer.Backend.Equipment
             //Drone's attributes can never by higher than twice their starting value (R5, p123)
             //When you need to use a 0 for the math, use 0.5 instead
             if (IsDrone && !await _objCharacter.GetIgnoreRulesAsync(token).ConfigureAwait(false) &&
-                (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).DroneModsMaximumPilot)
+                await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetDroneModsMaximumPilotAsync(token).ConfigureAwait(false))
             {
                 return Math.Max(await GetPilotAsync(token).ConfigureAwait(false) * 2, 1);
             }
@@ -4712,8 +4794,8 @@ namespace Chummer.Backend.Equipment
                 Text = await GetCurrentDisplayNameAsync(token).ConfigureAwait(false),
                 Tag = this,
                 ContextMenuStrip = cmsVehicle,
-                ForeColor = PreferredColor,
-                ToolTipText = Notes.WordWrap()
+                ForeColor = await GetPreferredColorAsync(token).ConfigureAwait(false),
+                ToolTipText = (await GetNotesAsync(token).ConfigureAwait(false)).WordWrap()
             };
 
             TreeNodeCollection lstChildNodes = objNode.Nodes;
@@ -4822,6 +4904,20 @@ namespace Chummer.Backend.Equipment
                     ? ColorManager.GrayText
                     : ColorManager.WindowText;
             }
+        }
+
+        public async Task<Color> GetPreferredColorAsync(CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
+            {
+                return !string.IsNullOrEmpty(ParentID)
+                    ? ColorManager.GenerateCurrentModeDimmedColor(await GetNotesColorAsync(token).ConfigureAwait(false))
+                    : ColorManager.GenerateCurrentModeColor(await GetNotesColorAsync(token).ConfigureAwait(false));
+            }
+            return !string.IsNullOrEmpty(ParentID)
+                    ? ColorManager.GrayText
+                    : ColorManager.WindowText;
         }
 
         public bool Stolen
@@ -5090,7 +5186,7 @@ namespace Chummer.Backend.Equipment
 
             if (strExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
             {
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdValue))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdValue))
                 {
                     sbdValue.Append(strExpression);
                     if (ChildrenWithMatrixAttributes.Any())
@@ -5152,7 +5248,7 @@ namespace Chummer.Backend.Equipment
 
             if (strExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
             {
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdValue))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdValue))
                 {
                     sbdValue.Append(strExpression);
                     if (ChildrenWithMatrixAttributes.Any())

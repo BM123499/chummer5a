@@ -113,9 +113,10 @@ namespace Chummer
             }).ConfigureAwait(false);
 
             // Don't show the Extended Spell checkbox if the option to Extend any Detection Spell is disabled.
-            await chkExtended.DoThreadSafeAsync(x => x.Visible = _objCharacter.Settings.ExtendAnyDetectionSpell).ConfigureAwait(false);
+            bool blnExtendedVisible = await (await _objCharacter.GetSettingsAsync()).GetExtendAnyDetectionSpellAsync().ConfigureAwait(false);
+            await chkExtended.DoThreadSafeAsync(x => x.Visible = blnExtendedVisible).ConfigureAwait(false);
             _blnLoading = false;
-            await BuildSpellList(cboCategory.SelectedValue?.ToString()).ConfigureAwait(false);
+            await BuildSpellList(await cboCategory.DoThreadSafeFuncAsync(x => x.SelectedValue?.ToString()).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
         private async void lstSpells_SelectedIndexChanged(object sender, EventArgs e)
@@ -286,14 +287,14 @@ namespace Chummer
             bool blnHasSearch = await txtSearch.DoThreadSafeFuncAsync(x => x.TextLength != 0, token: token).ConfigureAwait(false);
 
             string strSpace = await LanguageManager.GetStringAsync("String_Space", token: token).ConfigureAwait(false);
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool, out List<ListItem> lstSpellItems))
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool, out List<ListItem> lstSpellItems))
             {
-                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool, out HashSet<string> limitDescriptors))
-                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool, out HashSet<string> limitDescriptors))
+                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                 out HashSet<string> blockDescriptors))
                 {
                     string strFilter = string.Empty;
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdFilter))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdFilter))
                     {
                         sbdFilter.Append('(').Append(await _objCharacter.Settings.BookXPathAsync(token: token).ConfigureAwait(false)).Append(')');
                         if (!string.IsNullOrEmpty(strCategory) && strCategory != "Show All"
@@ -302,7 +303,7 @@ namespace Chummer
                             sbdFilter.Append(" and category = ").Append(strCategory.CleanXPath());
                         else
                         {
-                            using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                           out StringBuilder sbdCategoryFilter))
                             {
                                 foreach (string strItem in _lstCategory.Select(x => x.Value.ToString()))
@@ -322,7 +323,7 @@ namespace Chummer
                             }
                         }
 
-                        if (_objCharacter.Settings.ExtendAnyDetectionSpell)
+                        if (await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetExtendAnyDetectionSpellAsync(token).ConfigureAwait(false))
                             sbdFilter.Append(" and ((not(contains(name, \", Extended\"))))");
                         if (!string.IsNullOrEmpty(strSearch))
                             sbdFilter.Append(" and ").Append(CommonFunctions.GenerateSearchXPath(strSearch));
@@ -569,7 +570,7 @@ namespace Chummer
             bool blnExtendedFound = false;
             bool blnAlchemicalFound = false;
             string strDescriptors = xmlSpell.SelectSingleNodeAndCacheExpression("descriptor", token)?.Value;
-            using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdDescriptors))
+            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdDescriptors))
             {
                 if (!string.IsNullOrEmpty(strDescriptors))
                 {
@@ -689,7 +690,7 @@ namespace Chummer
             string strSelectedSpellName = xmlSpell.SelectSingleNodeAndCacheExpression("name", token)?.Value ?? string.Empty;
             string strSelectedSpellCategory = xmlSpell.SelectSingleNodeAndCacheExpression("category", token)?.Value ?? string.Empty;
             List<Improvement> lstDrainRelevantImprovements = new List<Improvement>();
-            using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+            using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                               out HashSet<string> setDescriptors))
             {
                 foreach (string strDescriptor in strDescriptors.SplitNoAlloc(',', StringSplitOptions.RemoveEmptyEntries))
@@ -893,7 +894,7 @@ namespace Chummer
             int intDrainDv = 0;
             if (strDv.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
             {
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                   out StringBuilder sbdDv))
                 {
                     sbdDv.Append(strDv);

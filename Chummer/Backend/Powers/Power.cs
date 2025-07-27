@@ -287,13 +287,13 @@ namespace Chummer
                 objNode.TryGetStringFieldQuickly("source", ref _strSource);
                 objNode.TryGetStringFieldQuickly("page", ref _strPage);
 
-                if (GlobalSettings.InsertPdfNotesIfAvailable && string.IsNullOrEmpty(Notes))
+                if (GlobalSettings.InsertPdfNotesIfAvailable && string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
                 {
-                    Notes = await CommonFunctions.GetBookNotesAsync(objNode,
+                    await SetNotesAsync(await CommonFunctions.GetBookNotesAsync(objNode,
                         await GetNameAsync(token).ConfigureAwait(false),
                         await GetCurrentDisplayNameAsync(token).ConfigureAwait(false), Source, Page,
                         await DisplayPageAsync(GlobalSettings.Language, token).ConfigureAwait(false), CharacterObject,
-                        token).ConfigureAwait(false);
+                        token).ConfigureAwait(false), token).ConfigureAwait(false);
                 }
 
                 if (!objNode.TryGetInt32FieldQuickly("maxlevel", ref _intMaxLevels))
@@ -698,7 +698,7 @@ namespace Chummer
                             "page", await DisplayPageAsync(strLanguageToPrint, token).ConfigureAwait(false), token)
                         .ConfigureAwait(false);
                     if (GlobalSettings.PrintNotes)
-                        await objWriter.WriteElementStringAsync("notes", Notes, token).ConfigureAwait(false);
+                        await objWriter.WriteElementStringAsync("notes", await GetNotesAsync(token).ConfigureAwait(false), token).ConfigureAwait(false);
                     // <enhancements>
                     XmlElementWriteHelper objEnhancementsElement
                         = await objWriter.StartElementAsync("enhancements", token).ConfigureAwait(false);
@@ -1231,7 +1231,8 @@ namespace Chummer
             {
                 using (LockObject.EnterReadLock())
                 {
-                    return Convert.ToDecimal(_strPointsPerLevel, GlobalSettings.InvariantCultureInfo);
+                    decimal.TryParse(_strPointsPerLevel, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decimal decReturn);
+                    return decReturn;
                 }
             }
             set
@@ -1256,7 +1257,8 @@ namespace Chummer
             try
             {
                 token.ThrowIfCancellationRequested();
-                return Convert.ToDecimal(_strPointsPerLevel, GlobalSettings.InvariantCultureInfo);
+                decimal.TryParse(_strPointsPerLevel, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decimal decReturn);
+                return decReturn;
             }
             finally
             {
@@ -1324,7 +1326,8 @@ namespace Chummer
             {
                 using (LockObject.EnterReadLock())
                 {
-                    return Convert.ToDecimal(_strAdeptWayDiscount, GlobalSettings.InvariantCultureInfo);
+                    decimal.TryParse(_strAdeptWayDiscount, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decimal decReturn);
+                    return decReturn;
                 }
             }
             set
@@ -1349,7 +1352,8 @@ namespace Chummer
             try
             {
                 token.ThrowIfCancellationRequested();
-                return Convert.ToDecimal(_strAdeptWayDiscount, GlobalSettings.InvariantCultureInfo);
+                decimal.TryParse(_strAdeptWayDiscount, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decimal decReturn);
+                return decReturn;
             }
             finally
             {
@@ -1585,7 +1589,7 @@ namespace Chummer
                     if (!string.IsNullOrEmpty(_strCachedTotalRatingToolTip))
                         return _strCachedTotalRatingToolTip;
                     string strSpace = LanguageManager.GetString("String_Space");
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdModifier))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdModifier))
                     {
                         bool blnFirstItem = true;
                         bool blnLevelsEnabled = LevelsEnabled;
@@ -1655,7 +1659,7 @@ namespace Chummer
                 if (!string.IsNullOrEmpty(_strCachedTotalRatingToolTip))
                     return _strCachedTotalRatingToolTip;
                 string strSpace = await LanguageManager.GetStringAsync("String_Space", token: token).ConfigureAwait(false);
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdModifier))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdModifier))
                 {
                     bool blnFirstItem = true;
                     bool blnLevelsEnabled = await GetLevelsEnabledAsync(token).ConfigureAwait(false);
@@ -2049,7 +2053,7 @@ namespace Chummer
                     }
 
                     string strSpace = LanguageManager.GetString("String_Space");
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdModifier))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdModifier))
                     {
                         decimal decExtraPointCost = ExtraPointCost;
                         if (decExtraPointCost != 0)
@@ -2154,7 +2158,7 @@ namespace Chummer
                 }
 
                 string strSpace = await LanguageManager.GetStringAsync("String_Space", token: token).ConfigureAwait(false);
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdModifier))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdModifier))
                 {
                     decimal decExtraPointCost = await GetExtraPointCostAsync(token).ConfigureAwait(false);
                     if (decExtraPointCost != 0)
@@ -2646,6 +2650,37 @@ namespace Chummer
             }
         }
 
+        public async Task<string> GetNotesAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _strNotes;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task SetNotesAsync(string value, CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                // No need to write lock because interlocked guarantees safety
+                if (Interlocked.Exchange(ref _strNotes, value) == value)
+                    return;
+                await OnPropertyChangedAsync(nameof(Notes), token).ConfigureAwait(false);
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
         /// <summary>
         /// Forecolor to use for Notes in treeviews.
         /// </summary>
@@ -2674,6 +2709,58 @@ namespace Chummer
                         OnPropertyChanged();
                     }
                 }
+            }
+        }
+
+        public async Task<Color> GetNotesColorAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _colNotes;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task SetNotesColorAsync(Color value, CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (value == _colNotes)
+                    return;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+
+            objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (_colNotes == value)
+                    return;
+                IAsyncDisposable objLocker2 = await LockObject.EnterWriteLockAsync(token).ConfigureAwait(false);
+                try
+                {
+                    token.ThrowIfCancellationRequested();
+                    _colNotes = value;
+                    await OnPropertyChangedAsync(nameof(NotesColor), token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await objLocker2.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -2777,6 +2864,22 @@ namespace Chummer
             }
         }
 
+        public async Task<Color> GetPreferredColorAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return !string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false))
+                    ? ColorManager.GenerateCurrentModeColor(await GetNotesColorAsync(token).ConfigureAwait(false))
+                    : ColorManager.WindowText;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
         #endregion Properties
 
         #region Complex Properties
@@ -2797,8 +2900,8 @@ namespace Chummer
                     {
                         intReturn = CharacterObject.Settings.IncreasedImprovedAbilityMultiplier
                             // +1 at the end so that division of 2 always rounds up, and integer division by 2 is significantly less expensive than decimal/double division
-                            ? Math.Min(intReturn, _intCachedLearnedRating + (_intCachedLearnedRating + 1) / 2)
-                            : Math.Min(intReturn, (_intCachedLearnedRating + 1) / 2);
+                            ? Math.Min(intReturn, _intCachedLearnedRating + _intCachedLearnedRating.DivAwayFromZero(2))
+                            : Math.Min(intReturn, _intCachedLearnedRating.DivAwayFromZero(2));
                     }
 
                     if (!CharacterObject.IgnoreRules)
@@ -2828,8 +2931,8 @@ namespace Chummer
                     intReturn = await (await CharacterObject.GetSettingsAsync(token).ConfigureAwait(false))
                         .GetIncreasedImprovedAbilityMultiplierAsync(token).ConfigureAwait(false)
                         // +1 at the end so that division of 2 always rounds up, and integer division by 2 is significantly less expensive than decimal/double division
-                        ? Math.Min(intReturn, _intCachedLearnedRating + (_intCachedLearnedRating + 1) / 2)
-                        : Math.Min(intReturn, (_intCachedLearnedRating + 1) / 2);
+                        ? Math.Min(intReturn, _intCachedLearnedRating + _intCachedLearnedRating.DivAwayFromZero(2))
+                        : Math.Min(intReturn, _intCachedLearnedRating.DivAwayFromZero(2));
                 }
 
                 if (!await CharacterObject.GetIgnoreRulesAsync(token).ConfigureAwait(false))

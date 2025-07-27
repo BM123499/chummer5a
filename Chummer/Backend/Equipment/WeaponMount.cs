@@ -18,6 +18,7 @@
  */
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
@@ -214,9 +215,16 @@ namespace Chummer.Backend.Equipment
                 string strCost = _strCost.TrimStartOnce("Variable(", true).TrimEndOnce(')');
                 if (strCost.Contains('-'))
                 {
-                    string[] strValues = strCost.Split('-');
-                    decMin = Convert.ToDecimal(strValues[0], GlobalSettings.InvariantCultureInfo);
-                    decMax = Convert.ToDecimal(strValues[1], GlobalSettings.InvariantCultureInfo);
+                    string[] strValues = strCost.SplitFixedSizePooledArray('-', 2);
+                    try
+                    {
+                        decMin = Convert.ToDecimal(strValues[0], GlobalSettings.InvariantCultureInfo);
+                        decMax = Convert.ToDecimal(strValues[1], GlobalSettings.InvariantCultureInfo);
+                    }
+                    finally
+                    {
+                        ArrayPool<string>.Shared.Return(strValues);
+                    }
                 }
                 else
                     decMin = Convert.ToDecimal(strCost.FastEscape('+'), GlobalSettings.InvariantCultureInfo);
@@ -255,8 +263,9 @@ namespace Chummer.Backend.Equipment
                             GlobalSettings.CultureInfo,
                             await LanguageManager.GetStringAsync("String_SelectVariableCost", token: token).ConfigureAwait(false),
                             await GetCurrentDisplayNameShortAsync(token).ConfigureAwait(false));
+                        int intDecimalPlaces = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMaxNuyenDecimalsAsync(token).ConfigureAwait(false);
                         using (ThreadSafeForm<SelectNumber> frmPickNumber
-                               = await ThreadSafeForm<SelectNumber>.GetAsync(() => new SelectNumber(_objCharacter.Settings.MaxNuyenDecimals)
+                               = await ThreadSafeForm<SelectNumber>.GetAsync(() => new SelectNumber(intDecimalPlaces)
                                {
                                    Minimum = decMin,
                                    Maximum = decMax,
@@ -287,9 +296,9 @@ namespace Chummer.Backend.Equipment
                         // ReSharper disable once MethodHasAsyncOverloadWithCancellation
                         Page, DisplayPage(GlobalSettings.Language), _objCharacter, token);
                 else
-                    Notes = await CommonFunctions.GetBookNotesAsync(objXmlMod, Name,
+                    await SetNotesAsync(await CommonFunctions.GetBookNotesAsync(objXmlMod, Name,
                         await GetCurrentDisplayNameAsync(token).ConfigureAwait(false), Source, Page,
-                        await DisplayPageAsync(GlobalSettings.Language, token).ConfigureAwait(false), _objCharacter, token).ConfigureAwait(false);
+                        await DisplayPageAsync(GlobalSettings.Language, token).ConfigureAwait(false), _objCharacter, token).ConfigureAwait(false), token).ConfigureAwait(false);
             }
         }
 
@@ -564,18 +573,19 @@ namespace Chummer.Backend.Equipment
             await objWriter.WriteElementStringAsync("name_english", Name, token: token).ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("fullname",
                 await DisplayNameAsync(strLanguageToPrint, token).ConfigureAwait(false), token: token).ConfigureAwait(false);
-            await objWriter.WriteElementStringAsync("category", DisplayCategory(strLanguageToPrint), token: token).ConfigureAwait(false);
+            await objWriter.WriteElementStringAsync("category", await DisplayCategoryAsync(strLanguageToPrint, token).ConfigureAwait(false), token: token).ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("category_english", Category, token: token).ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("limit", Limit, token: token).ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("slots", Slots.ToString(GlobalSettings.InvariantCultureInfo),
                 token: token).ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("avail",
                 await TotalAvailAsync(objCulture, strLanguageToPrint, token).ConfigureAwait(false), token: token).ConfigureAwait(false);
+            string strNuyenFormat = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetNuyenFormatAsync(token).ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("cost",
-                (await GetTotalCostAsync(token).ConfigureAwait(false)).ToString(_objCharacter.Settings.NuyenFormat,
+                (await GetTotalCostAsync(token).ConfigureAwait(false)).ToString(strNuyenFormat,
                     objCulture), token: token).ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("owncost",
-                (await GetOwnCostAsync(token).ConfigureAwait(false)).ToString(_objCharacter.Settings.NuyenFormat,
+                (await GetOwnCostAsync(token).ConfigureAwait(false)).ToString(strNuyenFormat,
                     objCulture), token: token).ConfigureAwait(false);
             await objWriter.WriteElementStringAsync("page", await DisplayPageAsync(strLanguageToPrint, token).ConfigureAwait(false),
                 token: token).ConfigureAwait(false);
@@ -593,7 +603,7 @@ namespace Chummer.Backend.Equipment
                 .ConfigureAwait(false);
             await objWriter.WriteEndElementAsync().ConfigureAwait(false);
             if (GlobalSettings.PrintNotes)
-                await objWriter.WriteElementStringAsync("notes", Notes, token: token).ConfigureAwait(false);
+                await objWriter.WriteElementStringAsync("notes", await GetNotesAsync(token).ConfigureAwait(false), token: token).ConfigureAwait(false);
             await objWriter.WriteEndElementAsync().ConfigureAwait(false);
         }
 
@@ -850,6 +860,26 @@ namespace Chummer.Backend.Equipment
         }
 
         /// <summary>
+        /// Translated Category.
+        /// </summary>
+        public Task<string> DisplayCategoryAsync(string strLanguage, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled<string>(token);
+            if (strLanguage.Equals(GlobalSettings.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(Category);
+
+            return Inner();
+            async Task<string> Inner()
+            {
+                XPathNavigator xmlNode = (await _objCharacter.LoadDataXPathAsync("vehicles.xml", strLanguage, token: token).ConfigureAwait(false))
+                                .SelectSingleNodeAndCacheExpression(
+                                    "/chummer/categories/category[. = " + Category.CleanXPath() + "]/@translate", token);
+                return xmlNode?.Value ?? Category;
+            }
+        }
+
+        /// <summary>
         /// Category.
         /// </summary>
         public string Category
@@ -1034,6 +1064,21 @@ namespace Chummer.Backend.Equipment
             set => _strNotes = value;
         }
 
+        public Task<string> GetNotesAsync(CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled<string>(token);
+            return Task.FromResult(_strNotes);
+        }
+
+        public Task SetNotesAsync(string value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            _strNotes = value;
+            return Task.CompletedTask;
+        }
+
         /// <summary>
         /// Forecolor to use for Notes in treeviews.
         /// </summary>
@@ -1041,6 +1086,21 @@ namespace Chummer.Backend.Equipment
         {
             get => _colNotes;
             set => _colNotes = value;
+        }
+
+        public Task<Color> GetNotesColorAsync(CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled<Color>(token);
+            return Task.FromResult(_colNotes);
+        }
+
+        public Task SetNotesColorAsync(Color value, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled(token);
+            _colNotes = value;
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1152,7 +1212,7 @@ namespace Chummer.Backend.Equipment
                 blnModifyParentAvail = strAvail.StartsWith('+', '-');
                 if (strAvail.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
                     {
                         sbdAvail.Append(strAvail.TrimStart('+'));
                         _objCharacter.AttributeSection.ProcessAttributesInXPath(sbdAvail, strAvail);
@@ -1232,7 +1292,7 @@ namespace Chummer.Backend.Equipment
                 blnModifyParentAvail = strAvail.StartsWith('+', '-');
                 if (strAvail.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
                     {
                         sbdAvail.Append(strAvail.TrimStart('+'));
                         await _objCharacter.AttributeSection.ProcessAttributesInXPathAsync(sbdAvail, strAvail, token: token).ConfigureAwait(false);
@@ -1422,7 +1482,7 @@ namespace Chummer.Backend.Equipment
                 string strCost = Cost;
                 if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decReturn))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
                     {
                         sbdCost.Append(strCost);
                         _objCharacter.AttributeSection.ProcessAttributesInXPath(sbdCost, strCost);
@@ -1478,7 +1538,7 @@ namespace Chummer.Backend.Equipment
             string strCost = Cost;
             if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decReturn))
             {
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
                 {
                     sbdCost.Append(strCost);
                     await _objCharacter.AttributeSection.ProcessAttributesInXPathAsync(sbdCost, strCost, token: token).ConfigureAwait(false);
@@ -1583,7 +1643,7 @@ namespace Chummer.Backend.Equipment
             string strReturn = DisplayNameShort(strLanguage);
             if (WeaponMountOptions.Count > 0)
             {
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdReturn))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdReturn))
                 {
                     sbdReturn.Append(strReturn);
                     string strSpace = LanguageManager.GetString("String_Space", strLanguage);
@@ -1618,7 +1678,7 @@ namespace Chummer.Backend.Equipment
             string strReturn = await DisplayNameShortAsync(strLanguage, token).ConfigureAwait(false);
             if (WeaponMountOptions.Count > 0)
             {
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdReturn))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdReturn))
                 {
                     sbdReturn.Append(strReturn);
                     string strSpace = await LanguageManager.GetStringAsync("String_Space", strLanguage, token: token).ConfigureAwait(false);
@@ -1852,8 +1912,8 @@ namespace Chummer.Backend.Equipment
                 Text = await GetCurrentDisplayNameAsync(token).ConfigureAwait(false),
                 Tag = this,
                 ContextMenuStrip = cmsVehicleWeaponMount,
-                ForeColor = PreferredColor,
-                ToolTipText = Notes.WordWrap()
+                ForeColor = await GetPreferredColorAsync(token).ConfigureAwait(false),
+                ToolTipText = (await GetNotesAsync(token).ConfigureAwait(false)).WordWrap()
             };
 
             TreeNodeCollection lstChildNodes = objNode.Nodes;
@@ -1893,6 +1953,20 @@ namespace Chummer.Backend.Equipment
                     ? ColorManager.GrayText
                     : ColorManager.WindowText;
             }
+        }
+
+        public async Task<Color> GetPreferredColorAsync(CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
+            {
+                return IncludedInVehicle
+                    ? ColorManager.GenerateCurrentModeDimmedColor(await GetNotesColorAsync(token).ConfigureAwait(false))
+                    : ColorManager.GenerateCurrentModeColor(await GetNotesColorAsync(token).ConfigureAwait(false));
+            }
+            return IncludedInVehicle
+                    ? ColorManager.GrayText
+                    : ColorManager.WindowText;
         }
 
         #endregion UI Methods
@@ -2149,9 +2223,16 @@ namespace Chummer.Backend.Equipment
                 string strCost = _strCost.TrimStartOnce("Variable(", true).TrimEndOnce(')');
                 if (strCost.Contains('-'))
                 {
-                    string[] strValues = strCost.Split('-');
-                    decMin = Convert.ToDecimal(strValues[0], GlobalSettings.InvariantCultureInfo);
-                    decMax = Convert.ToDecimal(strValues[1], GlobalSettings.InvariantCultureInfo);
+                    string[] strValues = strCost.SplitFixedSizePooledArray('-', 2);
+                    try
+                    {
+                        decMin = Convert.ToDecimal(strValues[0], GlobalSettings.InvariantCultureInfo);
+                        decMax = Convert.ToDecimal(strValues[1], GlobalSettings.InvariantCultureInfo);
+                    }
+                    finally
+                    {
+                        ArrayPool<string>.Shared.Return(strValues);
+                    }
                 }
                 else
                     decMin = Convert.ToDecimal(strCost.FastEscape('+'), GlobalSettings.InvariantCultureInfo);
@@ -2190,8 +2271,9 @@ namespace Chummer.Backend.Equipment
                             GlobalSettings.CultureInfo,
                             await LanguageManager.GetStringAsync("String_SelectVariableCost", token: token).ConfigureAwait(false),
                             await GetCurrentDisplayNameShortAsync(token).ConfigureAwait(false));
+                        int intDecimalPlaces = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMaxNuyenDecimalsAsync(token).ConfigureAwait(false);
                         using (ThreadSafeForm<SelectNumber> frmPickNumber
-                               = await ThreadSafeForm<SelectNumber>.GetAsync(() => new SelectNumber(_objCharacter.Settings.MaxNuyenDecimals)
+                               = await ThreadSafeForm<SelectNumber>.GetAsync(() => new SelectNumber(intDecimalPlaces)
                                {
                                    Minimum = decMin,
                                    Maximum = decMax,
@@ -2336,7 +2418,7 @@ namespace Chummer.Backend.Equipment
                 string strCost = _strCost;
                 if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
                     {
                         sbdCost.Append(strCost);
                         _objCharacter.AttributeSection.ProcessAttributesInXPath(sbdCost, strCost);
@@ -2358,7 +2440,7 @@ namespace Chummer.Backend.Equipment
             string strCost = _strCost;
             if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
             {
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdCost))
                 {
                     sbdCost.Append(strCost);
                     await _objCharacter.AttributeSection.ProcessAttributesInXPathAsync(sbdCost, strCost, token: token).ConfigureAwait(false);
@@ -2424,6 +2506,26 @@ namespace Chummer.Backend.Equipment
         }
 
         /// <summary>
+        /// Translated Category.
+        /// </summary>
+        public Task<string> DisplayCategoryAsync(string strLanguage, CancellationToken token = default)
+        {
+            if (token.IsCancellationRequested)
+                return Task.FromCanceled<string>(token);
+            if (strLanguage.Equals(GlobalSettings.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(Category);
+
+            return Inner();
+            async Task<string> Inner()
+            {
+                XPathNavigator xmlNode = (await _objCharacter.LoadDataXPathAsync("vehicles.xml", strLanguage, token: token).ConfigureAwait(false))
+                                .SelectSingleNodeAndCacheExpression(
+                                    "/chummer/categories/category[. = " + Category.CleanXPath() + "]/@translate", token);
+                return xmlNode?.Value ?? Category;
+            }
+        }
+
+        /// <summary>
         /// Total Availability in the program's current language.
         /// </summary>
         public string DisplayTotalAvail => TotalAvail(GlobalSettings.CultureInfo, GlobalSettings.Language);
@@ -2472,7 +2574,7 @@ namespace Chummer.Backend.Equipment
 
                     if (strAvail.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                     {
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
                         {
                             sbdAvail.Append(strAvail.TrimStart('+'));
                             _objCharacter.AttributeSection.ProcessAttributesInXPath(sbdAvail, strAvail);
@@ -2511,7 +2613,7 @@ namespace Chummer.Backend.Equipment
                 blnModifyParentAvail = strAvail.StartsWith('+', '-');
                 if (strAvail.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdAvail))
                     {
                         sbdAvail.Append(strAvail.TrimStart('+'));
                         await _objCharacter.AttributeSection.ProcessAttributesInXPathAsync(sbdAvail, strAvail, token: token).ConfigureAwait(false);

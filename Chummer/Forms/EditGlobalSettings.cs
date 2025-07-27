@@ -267,7 +267,7 @@ namespace Chummer
                 string strSelectedLanguage = _strSelectedLanguage;
                 // Build a list of Sourcebooks that will be passed to the Verify method.
                 // This is done since not all of the books are available in every language or the user may only wish to verify the content of certain books.
-                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                 out HashSet<string> setBooks))
                 {
                     foreach (ListItem objItem in await lstGlobalSourcebookInfos.DoThreadSafeFuncAsync(x => x.Items)
@@ -1069,7 +1069,7 @@ namespace Chummer
 
                 if (objSelected.DependenciesList.Count > 0)
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                   out StringBuilder sbdDependencies))
                     {
                         foreach (DirectoryDependency dependency in objSelected.DependenciesList)
@@ -1086,7 +1086,7 @@ namespace Chummer
 
                 if (objSelected.IncompatibilitiesList.Count > 0)
                 {
-                    using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                                   out StringBuilder sbdIncompatibilities))
                     {
                         foreach (DirectoryDependency exclusivity in objSelected.IncompatibilitiesList)
@@ -1321,7 +1321,7 @@ namespace Chummer
         {
             // Load the Sourcebook information.
             // Put the Sourcebooks into a List so they can first be sorted.
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                                                            out List<ListItem> lstSourcebookInfos))
             {
                 foreach (XPathNavigator objXmlBook in (await XmlManager
@@ -1714,7 +1714,7 @@ namespace Chummer
         private async Task PopulateDefaultCharacterSettingLists(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                                                            out List<ListItem> lstCharacterSettings))
             {
                 foreach (KeyValuePair<string, CharacterSettings> kvpLoopCharacterOptions in await SettingsManager
@@ -1776,7 +1776,7 @@ namespace Chummer
         private async Task PopulateChum5lzCompressionLevelOptions(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                        out List<ListItem> lstChum5lzCompressionLevelOptions))
             {
                 lstChum5lzCompressionLevelOptions.Add(new ListItem(LzmaHelper.ChummerCompressionPreset.Fastest,
@@ -1821,7 +1821,7 @@ namespace Chummer
         private async Task PopulateMugshotCompressionOptions(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                                                            out List<ListItem> lstMugshotCompressionOptions))
             {
                 lstMugshotCompressionOptions.Add(
@@ -1860,7 +1860,7 @@ namespace Chummer
                         strOldSelected = "jpeg_manual";
                     }
 
-                    await nudMugshotCompressionQuality.DoThreadSafeAsync(x => x.ValueAsInt = intQuality, token)
+                    await nudMugshotCompressionQuality.DoThreadSafeAsync(x => x.Value = intQuality, token)
                                                       .ConfigureAwait(false);
                 }
 
@@ -1891,7 +1891,7 @@ namespace Chummer
         {
             int intIndex = 0;
 
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                                                            out List<ListItem> lstPdfParameters))
             {
                 foreach (XPathNavigator objXmlNode in (await XmlManager
@@ -1960,7 +1960,7 @@ namespace Chummer
                                                         .ConfigureAwait(false)
                   ?? GlobalSettings.UseLoggingApplicationInsights.ToString();
 
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                                                            out List<ListItem> lstUseAIOptions))
             {
                 foreach (UseAILogging eOption in Enum.GetValues(typeof(UseAILogging)))
@@ -1994,7 +1994,7 @@ namespace Chummer
                                                       .ConfigureAwait(false)
                                     ?? GlobalSettings.ColorModeSetting.ToString();
 
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                                                            out List<ListItem> lstColorModes))
             {
                 foreach (ColorMode eLoopColorMode in Enum.GetValues(typeof(ColorMode)))
@@ -2025,7 +2025,7 @@ namespace Chummer
                                                                           .ToString(), token)
                                                              .ConfigureAwait(false);
 
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                                                            out List<ListItem> lstDpiScalingMethods))
             {
                 foreach (DpiScalingMethod eLoopDpiScalingMethod in Enum.GetValues(typeof(DpiScalingMethod)))
@@ -2102,7 +2102,7 @@ namespace Chummer
         private async Task PopulateLanguageList(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool, out List<ListItem> lstLanguages))
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool, out List<ListItem> lstLanguages))
             {
                 foreach (KeyValuePair<string, string> kvpLanguages in _dicCachedLanguageDocumentNames)
                 {
@@ -2119,7 +2119,7 @@ namespace Chummer
         private async Task PopulateSheetLanguageList(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+            using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                             out HashSet<string> setLanguagesWithSheets))
             {
                 // Populate the XSL list with all of the manifested XSL files found in the sheets\[language] directory.
@@ -2134,7 +2134,7 @@ namespace Chummer
 
                 token.ThrowIfCancellationRequested();
 
-                using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool,
+                using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool,
                                                                out List<ListItem> lstSheetLanguages))
                 {
                     foreach (KeyValuePair<string, string> kvpLanguages in _dicCachedLanguageDocumentNames)
@@ -2164,7 +2164,7 @@ namespace Chummer
                     x => x.Image = FlagImageGetter.GetFlagFromCountryCode(strSelectedSheetLanguage?.Substring(3, 2),
                         Math.Min(x.Width, x.Height)), token).ConfigureAwait(false);
 
-            using (new FetchSafelyFromPool<List<ListItem>>(Utils.ListItemListPool, out List<ListItem> lstFiles))
+            using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool, out List<ListItem> lstFiles))
             {
                 // Populate the XSL list with all of the manifested XSL files found in the sheets\[language] directory.
                 foreach (XPathNavigator xmlSheet in (await XmlManager.LoadXPathAsync("sheets.xml", token: token)
@@ -2350,10 +2350,12 @@ namespace Chummer
                 Task<XPathNavigator> tskLoadBooks
                     = XmlManager.LoadXPathAsync("books.xml", strLanguage: _strSelectedLanguage);
                 string strSelectedPath = string.Empty;
+                string strDialogDescription = await LanguageManager.GetStringAsync("String_SelectFolderForPDFScan", _strSelectedLanguage).ConfigureAwait(false);
                 DialogResult eResult = await this.DoThreadSafeFuncAsync(x =>
                 {
                     using (FolderBrowserDialog dlgSelectFolder = new FolderBrowserDialog())
                     {
+                        dlgSelectFolder.Description = strDialogDescription;
                         dlgSelectFolder.ShowNewFolderButton = false;
                         DialogResult eReturn = dlgSelectFolder.ShowDialog(x);
                         strSelectedPath = dlgSelectFolder.SelectedPath;
@@ -2364,12 +2366,24 @@ namespace Chummer
                 if (eResult != DialogResult.OK || string.IsNullOrWhiteSpace(strSelectedPath))
                     return;
 
-                using (new FetchSafelyFromPool<Stopwatch>(Utils.StopwatchPool, out Stopwatch sw))
+                eResult = await Program.ShowScrollableMessageBoxAsync(
+                    await LanguageManager.GetStringAsync("Message_ScanFoldersRecursively", _strSelectedLanguage).ConfigureAwait(false),
+                    buttons: MessageBoxButtons.YesNoCancel,
+                    icon: MessageBoxIcon.Question).ConfigureAwait(false);
+                if (eResult == DialogResult.Cancel)
+                    return;
+                SearchOption eOption = eResult == DialogResult.Yes
+                    ? SearchOption.AllDirectories
+                    : SearchOption.TopDirectoryOnly;
+
+                using (new FetchSafelyFromSafeObjectPool<Stopwatch>(Utils.StopwatchPool, out Stopwatch sw))
                 {
                     sw.Start();
                     XPathNavigator objBooks = await tskLoadBooks.ConfigureAwait(false);
-                    string[] astrFiles = Directory.GetFiles(strSelectedPath, "*.pdf");
+                    string[] astrFiles = Directory.GetFiles(strSelectedPath, "*.pdf", eOption);
                     ConcurrentDictionary<string, Tuple<string, int>> dicPatternsToMatch
+                        = new ConcurrentDictionary<string, Tuple<string, int>>();
+                    ConcurrentDictionary<string, Tuple<string, int>> dicBackupPatternsToMatch
                         = new ConcurrentDictionary<string, Tuple<string, int>>();
                     foreach (XPathNavigator objBook in objBooks
                                  .SelectAndCacheExpression(
@@ -2399,15 +2413,52 @@ namespace Chummer
                         dicPatternsToMatch.AddOrUpdate(strCode, tupValue, (x, y) => tupValue);
                     }
 
+                    foreach (XPathNavigator objBook in objBooks
+                                 .SelectAndCacheExpression("/chummer/books/book[not(matches/match/language = "
+                                     + _strSelectedLanguage.CleanXPath() + ")]"))
+                    {
+                        string strCode
+                            = objBook.SelectSingleNodeAndCacheExpression("code")
+                            ?.Value;
+                        if (string.IsNullOrEmpty(strCode))
+                            continue;
+                        XPathNavigator objMatch = null;
+                        if (_strSelectedLanguage != GlobalSettings.DefaultLanguage)
+                        {
+                            objMatch = objBook.SelectSingleNodeAndCacheExpression(
+                                    "matches/match[language = " + GlobalSettings.DefaultLanguage.CleanXPath() + ']');
+                        }
+                        if (objMatch == null)
+                        {
+                            objMatch = objBook.SelectSingleNodeAndCacheExpression("matches/match[not(language = " + _strSelectedLanguage.CleanXPath() + ")]");
+                            if (objMatch == null)
+                                continue;
+                        }
+                        string strMatchText
+                            = objMatch.SelectSingleNodeAndCacheExpression("text")
+                            ?.Value;
+                        if (string.IsNullOrEmpty(strMatchText))
+                            continue;
+                        if (dicPatternsToMatch.TryGetValue(strCode, out Tuple<string, int> tupMainValue)
+                            && string.Equals(strMatchText, tupMainValue.Item1))
+                            continue;
+                        if (!int.TryParse(
+                                objMatch.SelectSingleNodeAndCacheExpression("page")
+                                ?.Value, out int intMatchPage))
+                            continue;
+                        Tuple<string, int> tupValue = new Tuple<string, int>(strMatchText, intMatchPage);
+                        dicBackupPatternsToMatch.AddOrUpdate(strCode, tupValue, (x, y) => tupValue);
+                    }
+
                     using (ThreadSafeForm<LoadingBar> frmLoadingBar
-                           = await Program.CreateAndShowProgressBarAsync(strSelectedPath, astrFiles.Length)
+                           = await Program.CreateAndShowProgressBarAsync(strSelectedPath, dicPatternsToMatch.IsEmpty || dicBackupPatternsToMatch.IsEmpty ? astrFiles.Length : astrFiles.Length * 2)
                                .ConfigureAwait(false))
                     {
                         List<SourcebookInfo> list =
-                            await ScanFilesForPDFTexts(astrFiles, dicPatternsToMatch, frmLoadingBar.MyForm)
+                            await ScanFilesForPDFTexts(astrFiles, dicPatternsToMatch, dicBackupPatternsToMatch, frmLoadingBar.MyForm)
                                 .ConfigureAwait(false);
                         sw.Stop();
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                    out StringBuilder sbdFeedback))
                         {
                             sbdFeedback.AppendLine().AppendLine()
@@ -2448,21 +2499,60 @@ namespace Chummer
             }
         }
 
-        private async Task<List<SourcebookInfo>> ScanFilesForPDFTexts(IEnumerable<string> lstFiles,
+        private async Task<List<SourcebookInfo>> ScanFilesForPDFTexts(string[] lstFiles,
                                                                       ConcurrentDictionary<string, Tuple<string, int>> dicPatternsToMatch,
+                                                                      ConcurrentDictionary<string, Tuple<string, int>> dicBackupPatternsToMatch,
                                                                       LoadingBar frmProgressBar,
                                                                       CancellationToken token = default)
         {
+            token.ThrowIfCancellationRequested();
             // ConcurrentDictionary makes sure we don't pick out multiple files for the same sourcebook
             ConcurrentDictionary<string, SourcebookInfo>
                 dicResults = new ConcurrentDictionary<string, SourcebookInfo>();
             List<Task<List<SourcebookInfo>>> lstLoadingTasks = new List<Task<List<SourcebookInfo>>>(Utils.MaxParallelBatchSize);
             int intCounter = 0;
-            foreach (string strFile in lstFiles)
+            if (dicPatternsToMatch?.IsEmpty == false)
             {
-                lstLoadingTasks.Add(GetSourcebookInfo(strFile));
-                if (++intCounter != Utils.MaxParallelBatchSize)
-                    continue;
+                int intFileCounter = 0;
+                foreach (string strFile in lstFiles)
+                {
+                    token.ThrowIfCancellationRequested();
+                    lstLoadingTasks.Add(GetSourcebookInfo(strFile, dicPatternsToMatch));
+                    ++intFileCounter;
+                    if (++intCounter != Utils.MaxParallelBatchSize)
+                        continue;
+                    await Task.WhenAll(lstLoadingTasks).ConfigureAwait(false);
+                    foreach (Task<List<SourcebookInfo>> tskLoop in lstLoadingTasks)
+                    {
+                        foreach (SourcebookInfo objInfo in await tskLoop.ConfigureAwait(false))
+                        {
+                            // ReSharper disable once AccessToDisposedClosure
+                            if (objInfo == null)
+                                continue;
+                            dicResults.AddOrUpdate(objInfo.Code, objInfo, (x, y) =>
+                            {
+                                y.Path = objInfo.Path;
+                                y.Offset = objInfo.Offset;
+                                objInfo.Dispose();
+                                return y;
+                            });
+                        }
+                    }
+
+                    intCounter = 0;
+                    lstLoadingTasks.Clear();
+                    if (dicPatternsToMatch.IsEmpty)
+                    {
+                        for (; intFileCounter <= lstFiles.Length; ++intFileCounter)
+                        {
+                            await frmProgressBar
+                              .PerformStepAsync(eUseTextPattern: LoadingBar.ProgressBarTextPatterns.Scanning, token: token)
+                              .ConfigureAwait(false);
+                        }
+                        break;
+                    }
+                }
+
                 await Task.WhenAll(lstLoadingTasks).ConfigureAwait(false);
                 foreach (Task<List<SourcebookInfo>> tskLoop in lstLoadingTasks)
                 {
@@ -2480,36 +2570,71 @@ namespace Chummer
                         });
                     }
                 }
-
+            }
+            if (dicBackupPatternsToMatch?.IsEmpty == false)
+            {
                 intCounter = 0;
                 lstLoadingTasks.Clear();
-            }
-
-            await Task.WhenAll(lstLoadingTasks).ConfigureAwait(false);
-            foreach (Task<List<SourcebookInfo>> tskLoop in lstLoadingTasks)
-            {
-                foreach (SourcebookInfo objInfo in await tskLoop.ConfigureAwait(false))
+                string strFallbackFormat = await LanguageManager.GetStringAsync("String_Fallback_Pattern", _strSelectedLanguage, token: token).ConfigureAwait(false);
+                foreach (string strFile in lstFiles)
                 {
-                    // ReSharper disable once AccessToDisposedClosure
-                    if (objInfo == null)
+                    token.ThrowIfCancellationRequested();
+                    lstLoadingTasks.Add(GetSourcebookInfo(strFile, dicBackupPatternsToMatch, strFallbackFormat));
+                    if (++intCounter != Utils.MaxParallelBatchSize)
                         continue;
-                    dicResults.AddOrUpdate(objInfo.Code, objInfo, (x, y) =>
+                    await Task.WhenAll(lstLoadingTasks).ConfigureAwait(false);
+                    foreach (Task<List<SourcebookInfo>> tskLoop in lstLoadingTasks)
                     {
-                        y.Path = objInfo.Path;
-                        y.Offset = objInfo.Offset;
-                        objInfo.Dispose();
-                        return y;
-                    });
+                        foreach (SourcebookInfo objInfo in await tskLoop.ConfigureAwait(false))
+                        {
+                            // ReSharper disable once AccessToDisposedClosure
+                            if (objInfo == null)
+                                continue;
+                            dicResults.AddOrUpdate(objInfo.Code, objInfo, (x, y) =>
+                            {
+                                y.Path = objInfo.Path;
+                                y.Offset = objInfo.Offset;
+                                objInfo.Dispose();
+                                return y;
+                            });
+                        }
+                    }
+
+                    intCounter = 0;
+                    lstLoadingTasks.Clear();
+                    if (dicBackupPatternsToMatch.IsEmpty)
+                        break;
+                }
+
+                await Task.WhenAll(lstLoadingTasks).ConfigureAwait(false);
+                foreach (Task<List<SourcebookInfo>> tskLoop in lstLoadingTasks)
+                {
+                    foreach (SourcebookInfo objInfo in await tskLoop.ConfigureAwait(false))
+                    {
+                        // ReSharper disable once AccessToDisposedClosure
+                        if (objInfo == null)
+                            continue;
+                        dicResults.AddOrUpdate(objInfo.Code, objInfo, (x, y) =>
+                        {
+                            y.Path = objInfo.Path;
+                            y.Offset = objInfo.Offset;
+                            objInfo.Dispose();
+                            return y;
+                        });
+                    }
                 }
             }
 
-            async Task<List<SourcebookInfo>> GetSourcebookInfo(string strBookFile)
+            async Task<List<SourcebookInfo>> GetSourcebookInfo(string strBookFile, ConcurrentDictionary<string, Tuple<string, int>> dicPatternsToUse, string strProgressBarTextFormat = "")
             {
                 FileInfo objFileInfo = new FileInfo(strBookFile);
+                string strText = string.IsNullOrEmpty(strProgressBarTextFormat)
+                    ? objFileInfo.Name
+                    : string.Format(_objSelectedCultureInfo, strProgressBarTextFormat, objFileInfo.Name);
                 await frmProgressBar
-                      .PerformStepAsync(objFileInfo.Name, LoadingBar.ProgressBarTextPatterns.Scanning, token)
+                      .PerformStepAsync(strText, LoadingBar.ProgressBarTextPatterns.Scanning, token)
                       .ConfigureAwait(false);
-                return await ScanPDFForMatchingText(objFileInfo.FullName, dicPatternsToMatch, token).ConfigureAwait(false);
+                return await ScanPDFForMatchingText(objFileInfo.FullName, dicPatternsToUse, token).ConfigureAwait(false);
             }
 
             List<SourcebookInfo> lstReturn
@@ -2564,7 +2689,8 @@ namespace Chummer
                 token.ThrowIfCancellationRequested();
                 List<string> lstKeysToLoop = dicPatternsToMatch.GetKeysToListSafe();
                 //Search the first 15 pages for all the text
-                for (int intPage = 1; intPage <= 15; intPage++)
+                int intMaxPage = Math.Min(15, objPdfDocument.GetNumberOfPages());
+                for (int intPage = 1; intPage <= intMaxPage; intPage++)
                 {
                     token.ThrowIfCancellationRequested();
                     // No more patterns to match, exit early
@@ -2637,7 +2763,7 @@ namespace Chummer
                 if (intPage >= objInnerPdfDocument.GetNumberOfPages())
                     return string.Empty;
 
-                using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                               out StringBuilder sbdAllLines))
                 {
                     try

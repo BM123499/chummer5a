@@ -1268,7 +1268,7 @@ namespace Chummer.Backend.Skills
                             _dicSkills.Clear();
                             if (!blnLegacy)
                             {
-                                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                            out HashSet<string>
                                                setSkillIdsToSkip))
                                 {
@@ -1836,7 +1836,7 @@ namespace Chummer.Backend.Skills
 
                             if (!blnDidInitializeInLoad)
                             {
-                                using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                                using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                            out HashSet<string>
                                                setSkillNames))
                                 {
@@ -3049,7 +3049,7 @@ namespace Chummer.Backend.Skills
                         string strExpression = _objCharacter.Settings.KnowledgePointsExpression;
                         if (strExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                         {
-                            using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                        out StringBuilder sbdValue))
                             {
                                 sbdValue.Append(strExpression);
@@ -3109,10 +3109,10 @@ namespace Chummer.Backend.Skills
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    string strExpression = _objCharacter.Settings.KnowledgePointsExpression;
+                    string strExpression = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetKnowledgePointsExpressionAsync(token).ConfigureAwait(false);
                     if (strExpression.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                     {
-                        using (new FetchSafelyFromPool<StringBuilder>(Utils.StringBuilderPool,
+                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                    out StringBuilder sbdValue))
                         {
                             sbdValue.Append(strExpression);
@@ -3577,9 +3577,10 @@ namespace Chummer.Backend.Skills
                     .SetBuyWithKarmaAsync(await objNewSkill.GetBuyWithKarmaAsync(token).ConfigureAwait(false),
                         token)
                     .ConfigureAwait(false);
-                objExistingSkill.Notes = await objExistingSkill.GetNotesAsync(token).ConfigureAwait(false) +
-                                         await objNewSkill.GetNotesAsync(token).ConfigureAwait(false);
-                objExistingSkill.NotesColor = objNewSkill.NotesColor;
+                await objExistingSkill.SetNotesAsync(
+                    await objExistingSkill.GetNotesAsync(token).ConfigureAwait(false)
+                    + await objNewSkill.GetNotesAsync(token).ConfigureAwait(false), token).ConfigureAwait(false);
+                await objExistingSkill.SetNotesColorAsync(await objNewSkill.GetNotesColorAsync(token).ConfigureAwait(false), token).ConfigureAwait(false);
                 await objExistingSkill.Specializations
                     .AddAsyncRangeWithSortAsync(objNewSkill.Specializations,
                         (x, y) => CompareSpecializationsAsync(x, y, token)

@@ -1585,6 +1585,23 @@ namespace Chummer
         }
 
         /// <summary>
+        /// Whether the Quality has been implemented completely, or needs additional code support.
+        /// </summary>
+        public async Task<bool> GetImplementedAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _blnImplemented;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
         /// Whether the Quality contributes towards the character's Quality BP limits.
         /// </summary>
         public bool ContributeToLimit
@@ -1947,7 +1964,7 @@ namespace Chummer
                 if (!string.IsNullOrEmpty(_strCachedNotes))
                     return _strCachedNotes;
                 string strCachedNotes = string.Empty;
-                if (Suppressed)
+                if (await GetSuppressedAsync(token).ConfigureAwait(false))
                 {
                     Improvement objDisablingImprovement
                         = (await ImprovementManager
@@ -2020,9 +2037,63 @@ namespace Chummer
                     if (_colNotes == value)
                         return;
                     using (LockObject.EnterWriteLock())
+                    {
                         _colNotes = value;
-                    OnPropertyChanged();
+                        OnPropertyChanged();
+                    }
                 }
+            }
+        }
+
+        public async Task<Color> GetNotesColorAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _colNotes;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task SetNotesColorAsync(Color value, CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (value == _colNotes)
+                    return;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
+            }
+
+            objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (_colNotes == value)
+                    return;
+                IAsyncDisposable objLocker2 = await LockObject.EnterWriteLockAsync(token).ConfigureAwait(false);
+                try
+                {
+                    token.ThrowIfCancellationRequested();
+                    _colNotes = value;
+                    await OnPropertyChangedAsync(nameof(NotesColor), token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await objLocker2.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -2199,36 +2270,45 @@ namespace Chummer
 
         #region UI Methods
 
-        public TreeNode CreateTreeNode(ContextMenuStrip cmsQuality, TreeView treQualities)
+        public async Task<TreeNode> CreateTreeNode(ContextMenuStrip cmsQuality, TreeView treQualities, CancellationToken token = default)
         {
-            using (LockObject.EnterReadLock())
+            token.ThrowIfCancellationRequested();
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
             {
-                if ((OriginSource == QualitySource.BuiltIn ||
-                     OriginSource == QualitySource.Improvement ||
-                     OriginSource == QualitySource.LifeModule ||
-                     OriginSource == QualitySource.Metatype ||
-                     OriginSource == QualitySource.MetatypeRemovable ||
-                     OriginSource == QualitySource.MetatypeRemovedAtChargen ||
-                     OriginSource == QualitySource.Heritage) && !string.IsNullOrEmpty(Source)
-                                                             && !_objCharacter.Settings.BookEnabled(Source))
+                token.ThrowIfCancellationRequested();
+                QualitySource eOriginSource = await GetOriginSourceAsync(token).ConfigureAwait(false);
+                if ((eOriginSource == QualitySource.BuiltIn ||
+                     eOriginSource == QualitySource.Improvement ||
+                     eOriginSource == QualitySource.LifeModule ||
+                     eOriginSource == QualitySource.Metatype ||
+                     eOriginSource == QualitySource.MetatypeRemovable ||
+                     eOriginSource == QualitySource.MetatypeRemovedAtChargen ||
+                     eOriginSource == QualitySource.Heritage)
+                     && !string.IsNullOrEmpty(Source)
+                     && !await _objCharacter.Settings.BookEnabledAsync(Source, token).ConfigureAwait(false))
                     return null;
 
                 TreeNode objNode = new TreeNode
                 {
                     Name = InternalId,
-                    Text = CurrentDisplayName,
+                    Text = await GetCurrentDisplayNameAsync(token).ConfigureAwait(false),
                     Tag = this,
                     ContextMenuStrip = cmsQuality,
-                    ForeColor = PreferredColor,
-                    ToolTipText = Notes.WordWrap()
+                    ForeColor = await GetPreferredColorAsync(token).ConfigureAwait(false),
+                    ToolTipText = (await GetNotesAsync(token).ConfigureAwait(false)).WordWrap()
                 };
-                if (Suppressed)
+                if (await GetSuppressedAsync(token).ConfigureAwait(false))
                 {
                     //Treenodes store their font as null when inheriting from the treeview; have to pull it from the treeview directly to set the fontstyle.
-                    objNode.NodeFont = new Font(treQualities.Font, FontStyle.Strikeout);
+                    objNode.NodeFont = new Font(await treQualities.DoThreadSafeFuncAsync(x => x.Font, token).ConfigureAwait(false), FontStyle.Strikeout);
                 }
 
                 return objNode;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -2236,27 +2316,64 @@ namespace Chummer
         {
             get
             {
-                if (!Implemented)
+                using (LockObject.EnterReadLock())
                 {
-                    return ColorManager.ErrorColor;
-                }
-                if (!string.IsNullOrEmpty(Notes))
-                {
+                    if (!Implemented)
+                    {
+                        return ColorManager.ErrorColor;
+                    }
+                    if (!string.IsNullOrEmpty(Notes))
+                    {
+                        return OriginSource == QualitySource.BuiltIn
+                               || OriginSource == QualitySource.Improvement
+                               || OriginSource == QualitySource.LifeModule
+                               || OriginSource == QualitySource.Metatype
+                               || OriginSource == QualitySource.Heritage
+                            ? ColorManager.GenerateCurrentModeDimmedColor(NotesColor)
+                            : ColorManager.GenerateCurrentModeColor(NotesColor);
+                    }
                     return OriginSource == QualitySource.BuiltIn
                            || OriginSource == QualitySource.Improvement
                            || OriginSource == QualitySource.LifeModule
                            || OriginSource == QualitySource.Metatype
                            || OriginSource == QualitySource.Heritage
-                        ? ColorManager.GenerateCurrentModeDimmedColor(NotesColor)
-                        : ColorManager.GenerateCurrentModeColor(NotesColor);
+                        ? ColorManager.GrayText
+                        : ColorManager.WindowText;
+                }
+            }
+        }
+
+        public async Task<Color> GetPreferredColorAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                if (!await GetImplementedAsync(token).ConfigureAwait(false))
+                {
+                    return ColorManager.ErrorColor;
+                }
+                if (!string.IsNullOrEmpty(await GetNotesAsync(token).ConfigureAwait(false)))
+                {
+                    return OriginSource == QualitySource.BuiltIn
+                            || OriginSource == QualitySource.Improvement
+                            || OriginSource == QualitySource.LifeModule
+                            || OriginSource == QualitySource.Metatype
+                            || OriginSource == QualitySource.Heritage
+                        ? ColorManager.GenerateCurrentModeDimmedColor(await GetNotesColorAsync(token).ConfigureAwait(false))
+                        : ColorManager.GenerateCurrentModeColor(await GetNotesColorAsync(token).ConfigureAwait(false));
                 }
                 return OriginSource == QualitySource.BuiltIn
-                       || OriginSource == QualitySource.Improvement
-                       || OriginSource == QualitySource.LifeModule
-                       || OriginSource == QualitySource.Metatype
-                       || OriginSource == QualitySource.Heritage
+                        || OriginSource == QualitySource.Improvement
+                        || OriginSource == QualitySource.LifeModule
+                        || OriginSource == QualitySource.Metatype
+                        || OriginSource == QualitySource.Heritage
                     ? ColorManager.GrayText
                     : ColorManager.WindowText;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -2321,7 +2438,7 @@ namespace Chummer
                     {
                         token.ThrowIfCancellationRequested();
                         //Add to set for O(N log M) runtime instead of O(N * M)
-                        using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                        using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                         out HashSet<string>
                                                                             lstRequired))
                         {
@@ -2369,7 +2486,7 @@ namespace Chummer
                     if (xmlAllOfNode != null)
                     {
                         //Add to set for O(N log M) runtime instead of O(N * M)
-                        using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                        using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                         out HashSet<string>
                                                                             lstRequired))
                         {
@@ -2407,7 +2524,7 @@ namespace Chummer
                     if (xmlOneOfNode != null)
                     {
                         //Add to set for O(N log M) runtime instead of O(N * M)
-                        using (new FetchSafelyFromPool<HashSet<string>>(Utils.StringHashSetPool,
+                        using (new FetchSafelyFromSafeObjectPool<HashSet<string>>(Utils.StringHashSetPool,
                                                                         out HashSet<string>
                                                                             setQualityForbidden))
                         {
