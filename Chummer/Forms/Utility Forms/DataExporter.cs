@@ -20,7 +20,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -376,7 +375,7 @@ namespace Chummer
                     {
                         foreach (CustomDataDirectoryInfo objLoopInfo in await objSelectedGameplayOption
                                      .GetEnabledCustomDataDirectoryInfosAsync(token).ConfigureAwait(false))
-                            sbdCustomDataDirectories.AppendLine(await objLoopInfo.GetDisplayNameAsync(token)
+                            sbdCustomDataDirectories.AppendLine(await objLoopInfo.GetCurrentDisplayNameAsync(token)
                                 .ConfigureAwait(false));
 
                         await lblCustomData.DoThreadSafeAsync(x =>

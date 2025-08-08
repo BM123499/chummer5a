@@ -51,7 +51,7 @@ namespace Chummer.Backend.Equipment
     /// <summary>
     /// Lifestyle.
     /// </summary>
-    [DebuggerDisplay("{DisplayName(GlobalSettings.DefaultLanguage)}")]
+    [DebuggerDisplay("{DisplayName(\"en-us\")}")]
     public sealed class Lifestyle : IHasInternalId, IHasXmlDataNode, IHasNotes, ICanRemove, IHasCustomName, IHasSourceId, IHasSource, ICanSort, INotifyMultiplePropertiesChangedAsync, IHasLockObject, IHasCost, IHasCharacterObject
     {
         private static readonly Lazy<Logger> s_ObjLogger = new Lazy<Logger>(LogManager.GetCurrentClassLogger);
@@ -501,7 +501,7 @@ namespace Chummer.Backend.Equipment
                 }
 
                 objWriter.WriteEndElement();
-                objWriter.WriteElementString("notes", _strNotes.CleanOfInvalidUnicodeChars());
+                objWriter.WriteElementString("notes", _strNotes.CleanOfXmlInvalidUnicodeChars());
                 objWriter.WriteElementString("notesColor", ColorTranslator.ToHtml(_colNotes));
                 objWriter.WriteElementString("sortorder", _intSortOrder.ToString(GlobalSettings.InvariantCultureInfo));
                 objWriter.WriteEndElement();
@@ -4642,10 +4642,14 @@ namespace Chummer.Backend.Equipment
                 {
                     if (_objCharacter.Lifestyles.Contains(this) && !_objCharacter.Lifestyles.Remove(this))
                         return false;
-                    List<string> lstIds = new List<string>(LifestyleQualities.Count);
-                    LifestyleQualities.ForEach(x => lstIds.Add(x.InternalId));
-                    ImprovementManager.RemoveImprovements(CharacterObject, Improvement.ImprovementSource.Quality,
-                        lstIds);
+                    int intQualitiesCount = LifestyleQualities.Count;
+                    if (intQualitiesCount > 0)
+                    {
+                        List<string> lstIds = new List<string>(intQualitiesCount);
+                        LifestyleQualities.ForEach(x => lstIds.Add(x.InternalId));
+                        ImprovementManager.RemoveImprovements(CharacterObject, Improvement.ImprovementSource.Quality,
+                            lstIds);
+                    }
                 }
             }
 
@@ -4670,10 +4674,13 @@ namespace Chummer.Backend.Equipment
                     if (await _objCharacter.Lifestyles.ContainsAsync(this, token).ConfigureAwait(false)
                         && !await _objCharacter.Lifestyles.RemoveAsync(this, token).ConfigureAwait(false))
                         return false;
-
-                    List<string> lstIds = new List<string>(await LifestyleQualities.GetCountAsync(token).ConfigureAwait(false));
-                    await LifestyleQualities.ForEachAsync(x => lstIds.Add(x.InternalId), token).ConfigureAwait(false);
-                    await ImprovementManager.RemoveImprovementsAsync(CharacterObject, Improvement.ImprovementSource.Quality, lstIds, token).ConfigureAwait(false);
+                    int intQualitiesCount = await LifestyleQualities.GetCountAsync(token).ConfigureAwait(false);
+                    if (intQualitiesCount > 0)
+                    {
+                        List<string> lstIds = new List<string>(intQualitiesCount);
+                        await LifestyleQualities.ForEachAsync(x => lstIds.Add(x.InternalId), token).ConfigureAwait(false);
+                        await ImprovementManager.RemoveImprovementsAsync(CharacterObject, Improvement.ImprovementSource.Quality, lstIds, token).ConfigureAwait(false);
+                    }
                 }
                 finally
                 {

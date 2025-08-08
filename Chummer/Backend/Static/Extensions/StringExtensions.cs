@@ -21,6 +21,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -319,9 +320,21 @@ namespace Chummer
         /// <param name="strHaystack">String to search.</param>
         /// <param name="astrNeedles">Array of strings to match.</param>
         /// <param name="eComparison">Comparison rules by which to find instances of the substring to remove. Useful for when case-insensitive removal is required.</param>
-        /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int IndexOfAny(this string strHaystack, IReadOnlyCollection<string> astrNeedles, StringComparison eComparison)
+        {
+            return IndexOfAny(strHaystack, astrNeedles, 0, eComparison);
+        }
+
+        /// <summary>
+        /// Find the index of the first instance of a set of strings inside a haystack string.
+        /// </summary>
+        /// <param name="strHaystack">String to search.</param>
+        /// <param name="astrNeedles">Array of strings to match.</param>
+        /// <param name="intStartIndex">Index from which to start looking.</param>
+        /// <param name="eComparison">Comparison rules by which to find instances of the substring to remove. Useful for when case-insensitive removal is required.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int IndexOfAny(this string strHaystack, IReadOnlyCollection<string> astrNeedles, int intStartIndex, StringComparison eComparison = StringComparison.Ordinal)
         {
             if (string.IsNullOrEmpty(strHaystack))
                 return -1;
@@ -336,13 +349,13 @@ namespace Chummer
 
             // While one might think this is the slowest, worst-scaling way of checking for multiple needles, it's actually faster
             // in C# than a more detailed approach where characters of the haystack are progressively checked against all needles.
-            if (astrNeedles.All(x => x.Length > intHaystackLength))
+            if (astrNeedles.All(x => x.Length + intStartIndex > intHaystackLength))
                 return -1;
 
             int intEarliestNeedleIndex = intHaystackLength;
             foreach (string strNeedle in astrNeedles)
             {
-                int intNeedleIndex = strHaystack.IndexOf(strNeedle, 0, Math.Min(intHaystackLength, intEarliestNeedleIndex + strNeedle.Length), eComparison);
+                int intNeedleIndex = strHaystack.IndexOf(strNeedle, intStartIndex, Math.Min(intHaystackLength, intEarliestNeedleIndex + strNeedle.Length), eComparison);
                 if (intNeedleIndex >= 0 && intNeedleIndex < intEarliestNeedleIndex)
                     intEarliestNeedleIndex = intNeedleIndex;
             }
@@ -355,9 +368,21 @@ namespace Chummer
         /// <param name="strHaystack">String to search.</param>
         /// <param name="astrNeedles">Array of strings to match.</param>
         /// <param name="eComparison">Comparison rules by which to find instances of the substring to remove. Useful for when case-insensitive removal is required.</param>
-        /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int IndexOfAny(this string strHaystack, IEnumerable<string> astrNeedles, StringComparison eComparison = StringComparison.Ordinal)
+        {
+            return IndexOfAny(strHaystack, astrNeedles, 0, eComparison);
+        }
+
+        /// <summary>
+        /// Find the index of the first instance of a set of strings inside a haystack string.
+        /// </summary>
+        /// <param name="strHaystack">String to search.</param>
+        /// <param name="astrNeedles">Array of strings to match.</param>
+        /// <param name="intStartIndex">Index from which to start looking.</param>
+        /// <param name="eComparison">Comparison rules by which to find instances of the substring to remove. Useful for when case-insensitive removal is required.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int IndexOfAny(this string strHaystack, IEnumerable<string> astrNeedles, int intStartIndex, StringComparison eComparison = StringComparison.Ordinal)
         {
             if (string.IsNullOrEmpty(strHaystack))
                 return -1;
@@ -373,7 +398,7 @@ namespace Chummer
             int intEarliestNeedleIndex = intHaystackLength;
             foreach (string strNeedle in astrNeedles)
             {
-                int intNeedleIndex = strHaystack.IndexOf(strNeedle, 0, Math.Min(intHaystackLength, intEarliestNeedleIndex + strNeedle.Length), eComparison);
+                int intNeedleIndex = strHaystack.IndexOf(strNeedle, intStartIndex, Math.Min(intHaystackLength, intEarliestNeedleIndex + strNeedle.Length), eComparison);
                 if (intNeedleIndex >= 0 && intNeedleIndex < intEarliestNeedleIndex)
                     intEarliestNeedleIndex = intNeedleIndex;
             }
@@ -385,11 +410,35 @@ namespace Chummer
         /// </summary>
         /// <param name="strHaystack">String to search.</param>
         /// <param name="astrNeedles">Array of strings to match.</param>
-        /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int IndexOfAny(this string strHaystack, params string[] astrNeedles)
         {
             return strHaystack.IndexOfAny(astrNeedles, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Find the index of the first instance of a set of strings inside a haystack string.
+        /// </summary>
+        /// <param name="strHaystack">String to search.</param>
+        /// <param name="astrNeedles">Array of strings to match.</param>
+        /// <param name="intStartIndex">Index from which to start looking.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int IndexOfAny(this string strHaystack, int intStartIndex, params string[] astrNeedles)
+        {
+            return strHaystack.IndexOfAny(astrNeedles, intStartIndex, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Syntactic sugar for string::LastIndexOfAny that uses params in its argument for the char array.
+        /// </summary>
+        /// <param name="strHaystack">String to search.</param>
+        /// <param name="anyOf">Array of characters to match with LastIndexOfAny</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int LastIndexOfAny(this string strHaystack, params char[] anyOf)
+        {
+            if (string.IsNullOrEmpty(strHaystack))
+                return -1;
+            return strHaystack.LastIndexOfAny(anyOf);
         }
 
         /// <summary>
@@ -518,7 +567,6 @@ namespace Chummer
         /// <param name="strInput">String to search.</param>
         /// <param name="chrSeparator">Separator to use.</param>
         /// <param name="eSplitOptions">String split options.</param>
-        /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string[] Split(this string strInput, char chrSeparator, StringSplitOptions eSplitOptions)
         {
@@ -533,7 +581,6 @@ namespace Chummer
         /// <param name="strInput">String to search.</param>
         /// <param name="strSeparator">Separator to use.</param>
         /// <param name="eSplitOptions">String split options.</param>
-        /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string[] Split(this string strInput, string strSeparator, StringSplitOptions eSplitOptions)
         {
@@ -547,13 +594,13 @@ namespace Chummer
         /// </summary>
         /// <param name="strHaystack">Input string to search.</param>
         /// <param name="chrNeedle">Character for which to look.</param>
-        /// <returns></returns>
+        /// <param name="intStartIndex">Index from which to begin searching.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool Contains(this string strHaystack, char chrNeedle)
+        public static bool Contains(this string strHaystack, char chrNeedle, int intStartIndex = 0)
         {
             if (strHaystack == null)
                 throw new ArgumentNullException(nameof(strHaystack));
-            return strHaystack.IndexOf(chrNeedle) != -1;
+            return strHaystack.IndexOf(chrNeedle, intStartIndex) != -1;
         }
 
         /// <summary>
@@ -562,13 +609,41 @@ namespace Chummer
         /// <param name="strHaystack">Input string to search.</param>
         /// <param name="strNeedle">String for which to look.</param>
         /// <param name="eComparison">Comparison to use.</param>
-        /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Contains(this string strHaystack, string strNeedle, StringComparison eComparison)
         {
             if (strHaystack == null)
                 throw new ArgumentNullException(nameof(strHaystack));
             return strHaystack.IndexOf(strNeedle, eComparison) != -1;
+        }
+
+        /// <summary>
+        /// Syntactic sugar for a version of Contains(string) for strings from a specific starting index
+        /// </summary>
+        /// <param name="strHaystack">Input string to search.</param>
+        /// <param name="strNeedle">String for which to look.</param>
+        /// <param name="intStartIndex">Index from which to begin searching.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool Contains(this string strHaystack, string strNeedle, int intStartIndex)
+        {
+            if (strHaystack == null)
+                throw new ArgumentNullException(nameof(strHaystack));
+            return strHaystack.IndexOf(strNeedle, intStartIndex) != -1;
+        }
+
+        /// <summary>
+        /// Syntactic sugar for a version of Contains(string) for strings based on a specified StringComparison from a specific starting index
+        /// </summary>
+        /// <param name="strHaystack">Input string to search.</param>
+        /// <param name="strNeedle">String for which to look.</param>
+        /// <param name="intStartIndex">Index from which to begin searching.</param>
+        /// <param name="eComparison">Comparison to use.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool Contains(this string strHaystack, string strNeedle, int intStartIndex, StringComparison eComparison)
+        {
+            if (strHaystack == null)
+                throw new ArgumentNullException(nameof(strHaystack));
+            return strHaystack.IndexOf(strNeedle, intStartIndex, eComparison) != -1;
         }
 
         /// <summary>
@@ -2300,9 +2375,19 @@ namespace Chummer
         {
             if (string.IsNullOrEmpty(strInput))
                 return strInput;
-            return blnEscaped
-                ? s_RgxEscapedLineEndingsExpression.Value.Replace(strInput, Environment.NewLine)
-                : s_RgxLineEndingsExpression.Value.Replace(strInput, Environment.NewLine);
+            string[] astrLineEndingStrings = blnEscaped ? s_astrEscapedLineEndingStrings : s_astrLineEndingStrings;
+            if (!strInput.ContainsAnyParallel(astrLineEndingStrings))
+                return strInput;
+            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdReturn))
+            {
+                sbdReturn.Append(strInput);
+                // Two-step process so that newlines normalized in earlier iterations of the loop are not re-detected by later iterations
+                // Yes, this will replace null characters with newlines as well, too bad, we shouldn't have null characters in our strings anyway
+                foreach (string strSequence in astrLineEndingStrings)
+                    sbdReturn.Replace(strSequence, "\u0000");
+                sbdReturn.Replace("\u0000", Environment.NewLine);
+                return sbdReturn.ToString();
+            }
         }
 
         /// <summary>
@@ -2338,6 +2423,9 @@ namespace Chummer
             }
         }
 
+        // Order is important so that we replace composites before chars
+        private static readonly string[] s_astrStringsToProcessForHtmlConversion = new[] { "&", "&amp;amp;", "<", ">", "\r\n", "\n\r", "\n", "\r" };
+
         /// <summary>
         /// Escapes characters in a string that would cause confusion if the string were placed as HTML content
         /// </summary>
@@ -2347,12 +2435,19 @@ namespace Chummer
         {
             if (string.IsNullOrEmpty(strToClean))
                 return string.Empty;
-            string strReturn = strToClean
-                               .Replace("&", "&amp;")
-                               .Replace("&amp;amp;", "&amp;")
-                               .Replace("<", "&lt;")
-                               .Replace(">", "&gt;");
-            return s_RgxLineEndingsExpression.Value.Replace(strReturn, "<br />");
+            if (!strToClean.ContainsAnyParallel(s_astrStringsToProcessForHtmlConversion))
+                return strToClean;
+            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdReturn))
+            {
+                sbdReturn.Append(strToClean);
+                sbdReturn.Replace("&", "&amp;")
+                    .Replace("&amp;amp;", "&amp;")
+                    .Replace("<", "&lt;")
+                    .Replace(">", "&gt;");
+                foreach (string strSequence in s_astrLineEndingStrings)
+                    sbdReturn.Replace(strSequence, "<br />");
+                return sbdReturn.ToString();
+            }
         }
 
         private static readonly ReadOnlyCollection<char> s_achrPathInvalidPathChars
@@ -2500,7 +2595,7 @@ namespace Chummer
             if (string.IsNullOrEmpty(strInput))
                 return string.Empty;
             string strReturn = strInput.IsRtf() ? Rtf.ToHtml(strInput) : strInput.CleanForHtml();
-            return strReturn.CleanStylisticLigatures().NormalizeWhiteSpace().CleanOfInvalidUnicodeChars();
+            return strReturn.CleanStylisticLigatures().NormalizeWhiteSpace().CleanOfXmlInvalidUnicodeChars();
         }
 
         public static Task<string> RtfToHtmlAsync(this string strInput, CancellationToken token = default)
@@ -2514,8 +2609,120 @@ namespace Chummer
                 string strReturn = strInput.IsRtf()
                     ? Rtf.ToHtml(strInput)
                     : strInput.CleanForHtml();
-                return strReturn.CleanStylisticLigatures().NormalizeWhiteSpace().CleanOfInvalidUnicodeChars();
+                return strReturn.CleanStylisticLigatures().NormalizeWhiteSpace().CleanOfXmlInvalidUnicodeChars();
             }, token);
+        }
+
+        /// <summary>
+        /// Takes a string with RTF formatting and transforms all of its colors to dark mode versions.
+        /// </summary>
+        /// <param name="strInput">String to process with light mode colors.</param>
+        /// <param name="token">Cancellation token to listen to.</param>
+        /// <returns>Version of <paramref name="strInput"/> with RTF color codes replaced with dark mode versions.</returns>
+        public static string RtfToDarkMode(this string strInput, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            if (string.IsNullOrEmpty(strInput))
+                return string.Empty;
+            string strInputTrimmed = strInput.TrimStart();
+            if (!strInputTrimmed.StartsWith("{/rtf1", StringComparison.Ordinal) && !strInputTrimmed.StartsWith(@"{\rtf1", StringComparison.Ordinal))
+                return strInput; // Faster and dirtier version of the full IsRtf check for performance reasons
+            int intColorTableStart = strInput.IndexOf(@"{\colortbl;", StringComparison.Ordinal);
+            if (intColorTableStart < 0)
+                return strInput;
+            int intColorTableEnd = strInput.IndexOf('}', intColorTableStart);
+            if (intColorTableEnd < 0 || intColorTableStart - intColorTableEnd <= 11)
+                return strInput;
+            string strInputColorTable = strInput.Substring(intColorTableStart, intColorTableEnd - intColorTableStart - 11);
+            if (string.IsNullOrEmpty(strInputColorTable))
+                return strInput;
+            MatchCollection lstColorMatches = s_RtfColorsRegex.Value.Matches(strInputColorTable);
+            if (lstColorMatches.Count == 0)
+                return strInput;
+            string strInputPreColorTable = strInput.Substring(0, intColorTableStart);
+            string strInputPostColorTable = intColorTableEnd + 1 < strInput.Length ? strInput.Substring(intColorTableEnd + 1) : string.Empty;
+            Dictionary<string, string> dicColorReplacements = new Dictionary<string, string>(lstColorMatches.Count);
+            foreach (Match objColorEntry in lstColorMatches)
+            {
+                if (dicColorReplacements.ContainsKey(objColorEntry.Value))
+                    continue;
+                GroupCollection lstColorValues = objColorEntry.Groups;
+                if (lstColorValues.Count < 3
+                    || !int.TryParse(lstColorValues[0].Value, out int intRed)
+                    || !int.TryParse(lstColorValues[1].Value, out int intGreen)
+                    || !int.TryParse(lstColorValues[2].Value, out int intBlue))
+                    continue;
+                Color objExistingColor = Color.FromArgb(intRed, intGreen, intBlue);
+                Color objDarkModeColor = ColorManager.GenerateDarkModeColor(objExistingColor);
+                dicColorReplacements.Add(objColorEntry.Value, "\\red" + objDarkModeColor.R.ToString(GlobalSettings.InvariantCultureInfo)
+                    + "\\green" + objDarkModeColor.G.ToString(GlobalSettings.InvariantCultureInfo)
+                    + "\\blue" + objDarkModeColor.B.ToString(GlobalSettings.InvariantCultureInfo) + ';');
+            }
+            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdInputColorTable))
+            {
+                sbdInputColorTable.Append(strInputColorTable);
+                foreach (KeyValuePair<string, string> kvpReplace in dicColorReplacements)
+                {
+                    sbdInputColorTable.Replace(kvpReplace.Key, kvpReplace.Value);
+                }
+                return strInputPreColorTable + sbdInputColorTable.ToString() + strInputPostColorTable;
+            }
+        }
+
+        /// <summary>
+        /// Takes a string with RTF formatting that is assumed to have dark mode formatting and transforms all of its colors to light mode versions.
+        /// </summary>
+        /// <param name="strInput">String to process with dark mode colors.</param>
+        /// <param name="token">Cancellation token to listen to.</param>
+        /// <returns>Version of <paramref name="strInput"/> with RTF color codes replaced with light mode versions.</returns>
+        public static string RtfInverseToDarkMode(this string strInput, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            if (string.IsNullOrEmpty(strInput))
+                return string.Empty;
+            string strInputTrimmed = strInput.TrimStart();
+            if (!strInputTrimmed.StartsWith("{/rtf1", StringComparison.Ordinal) && !strInputTrimmed.StartsWith(@"{\rtf1", StringComparison.Ordinal))
+                return strInput; // Faster and dirtier version of the full IsRtf check for performance reasons
+            int intColorTableStart = strInput.IndexOf(@"{\colortbl;", StringComparison.Ordinal);
+            if (intColorTableStart < 0)
+                return strInput;
+            int intColorTableEnd = strInput.IndexOf('}', intColorTableStart);
+            if (intColorTableEnd < 0 || intColorTableEnd - intColorTableStart <= 11)
+                return strInput;
+            string strInputColorTable = strInput.Substring(intColorTableStart, intColorTableEnd - intColorTableStart - 11);
+            if (string.IsNullOrEmpty(strInputColorTable))
+                return strInput;
+            MatchCollection lstColorMatches = s_RtfColorsRegex.Value.Matches(strInputColorTable);
+            if (lstColorMatches.Count == 0)
+                return strInput;
+            string strInputPreColorTable = strInput.Substring(0, intColorTableStart);
+            string strInputPostColorTable = intColorTableEnd + 1 < strInput.Length ? strInput.Substring(intColorTableEnd + 1) : string.Empty;
+            Dictionary<string, string> dicColorReplacements = new Dictionary<string, string>(lstColorMatches.Count);
+            foreach (Match objColorEntry in lstColorMatches)
+            {
+                if (dicColorReplacements.ContainsKey(objColorEntry.Value))
+                    continue;
+                GroupCollection lstColorValues = objColorEntry.Groups;
+                if (lstColorValues.Count < 3
+                    || !int.TryParse(lstColorValues[0].Value, out int intRed)
+                    || !int.TryParse(lstColorValues[1].Value, out int intGreen)
+                    || !int.TryParse(lstColorValues[2].Value, out int intBlue))
+                    continue;
+                Color objDarkModeColor = Color.FromArgb(intRed, intGreen, intBlue);
+                Color objInvertedColor = ColorManager.GenerateInverseDarkModeColor(objDarkModeColor);
+                dicColorReplacements.Add(objColorEntry.Value, "\\red" + objInvertedColor.R.ToString(GlobalSettings.InvariantCultureInfo)
+                    + "\\green" + objInvertedColor.G.ToString(GlobalSettings.InvariantCultureInfo)
+                    + "\\blue" + objInvertedColor.B.ToString(GlobalSettings.InvariantCultureInfo) + ';');
+            }
+            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdInputColorTable))
+            {
+                sbdInputColorTable.Append(strInputColorTable);
+                foreach (KeyValuePair<string, string> kvpReplace in dicColorReplacements)
+                {
+                    sbdInputColorTable.Replace(kvpReplace.Key, kvpReplace.Value);
+                }
+                return strInputPreColorTable + sbdInputColorTable.ToString() + strInputPostColorTable;
+            }
         }
 
         /// <summary>
@@ -2544,91 +2751,387 @@ namespace Chummer
         /// <returns>True if the string contains HTML tags, False otherwise.</returns>
         public static bool ContainsHtmlTags(this string strInput)
         {
-            return !string.IsNullOrEmpty(strInput) && s_RgxHtmlTagExpression.Value.IsMatch(strInput);
+            if (string.IsNullOrEmpty(strInput))
+                return false;
+            int intInputLength = strInput.Length;
+            int intIndex = strInput.IndexOf('<');
+            if (intIndex < 0 || intIndex + 1 >= intInputLength)
+                return false;
+            // First check for special tags that are easy to identify: comments and doctypes
+            int intCommentOpener = strInput.IndexOf("<!--", intIndex);
+            if (intCommentOpener > 0 && intCommentOpener + 7 < intInputLength && strInput.IndexOf("-->", intCommentOpener + 4) > intCommentOpener)
+                return true;
+            int intDoctypeOpener = strInput.IndexOf("<!DOCTYPE", intIndex);
+            if (intDoctypeOpener > 0 && intDoctypeOpener + 10 < intInputLength && strInput.IndexOf('>', intDoctypeOpener + 9) > intDoctypeOpener)
+                return true;
+            int intClosingIndex = strInput.IndexOf('>', intIndex + 1);
+            while (intClosingIndex - intIndex > 1)
+            {
+                bool blnHasSlash = false;
+                bool blnValidTag = true;
+                for (int i = intIndex + 1; i < intClosingIndex; ++i)
+                {
+                    char chrLoop = strInput[i];
+                    if (char.IsLetterOrDigit(chrLoop))
+                        continue; // Letters are generally allowed, digits have some restrictions but it's too expensive to check for those so let's not.
+                    switch (chrLoop)
+                    {
+                        case ' ':
+                            if (i > intIndex + 1)
+                                continue;
+                            blnValidTag = false;
+                            break;
+                        case '/':
+                            // Slash only allowed as part of a closing tag
+                            if (!blnHasSlash && (i == intIndex + 1 || i == intClosingIndex - 1))
+                            {
+                                blnHasSlash = true;
+                                continue;
+                            }
+                            blnValidTag = false;
+                            break;
+                        case '=':
+                            // Equals signs only valid as part of an attribute assignment
+                            if (i > intIndex + 1 && i < intClosingIndex - 1 && strInput[i+1] == '\"' && char.IsLetterOrDigit(strInput[i-1]))
+                                continue;
+                            blnValidTag = false;
+                            break;
+                        case '\"':
+                            // If we have a quote, skip immediately to the next instance of a quote
+                            if (i < intClosingIndex - 1)
+                            {
+                                int intNextQuote = strInput.IndexOf('\"', i + 1, intClosingIndex - i - 1);
+                                if (intNextQuote > i)
+                                {
+                                    i = intNextQuote;
+                                    continue;
+                                }
+                            }
+                            blnValidTag = false;
+                            break;
+                        default:
+                            blnValidTag = false;
+                            break;
+                    }
+                    if (!blnValidTag)
+                        break;
+                }
+                if (blnValidTag)
+                    return true;
+                if (intClosingIndex + 1 >= intInputLength)
+                    return false;
+                intIndex = strInput.IndexOf('<', intClosingIndex + 1);
+                if (intIndex < 0 || intIndex + 1 >= intInputLength)
+                    return false;
+                intClosingIndex = strInput.IndexOf('>', intIndex + 1);
+            }
+            return false;
         }
 
         /// <summary>
         /// Cleans a string of characters that could cause issues when saved in an xml file and then loaded back in
         /// </summary>
-        /// <param name="strInput"></param>
-        /// <returns></returns>
-        public static string CleanOfInvalidUnicodeChars(this string strInput)
+        public static string CleanOfXmlInvalidUnicodeChars(this string strInput)
         {
             return string.IsNullOrEmpty(strInput)
                 ? string.Empty
-                : GlobalSettings.InvalidUnicodeCharsExpression.Replace(strInput, string.Empty);
+                : strInput.FastEscape(s_achrXmlInvalidUnicodeChars);
         }
 
         /// <summary>
-        /// Processes a string that begins with FixedValues to return the appropriate value based on the input rating.
-        /// Is also able to handle cases where there are functions with commas inside of the FixedValues string.
+        /// Checks if a string has characters that could cause issues when saved in an xml file and then loaded back in
+        /// </summary>
+        public static bool HasAnyXmlInvalidUnicodeChars(this string strInput)
+        {
+            return !string.IsNullOrEmpty(strInput) && strInput.IndexOfAny(s_achrXmlInvalidUnicodeChars) >= 0;
+        }
+
+        /// <summary>
+        /// Processes a string containing one or more FixedValues elements to return the appropriate value based on the input rating.
+        /// Is also able to handle cases where there are functions with commas inside of the FixedValues string(s).
         /// </summary>
         /// <param name="strInput">String to process (should not have FixedValues trimmed).</param>
         /// <param name="intRating">Rating to use for FixedValues.</param>
         public static string ProcessFixedValuesString(this string strInput, int intRating)
         {
-            if (!strInput.StartsWith("FixedValues(", StringComparison.Ordinal))
+            if (string.IsNullOrEmpty(strInput))
+                return string.Empty;
+            int intFixedValuesIndex = strInput.IndexOf("FixedValues(", StringComparison.Ordinal);
+            if (intFixedValuesIndex < 0)
                 return strInput;
-            strInput = strInput.TrimStartOnce("FixedValues(", true).TrimEndOnce(')');
-            int intIndex = strInput.IndexOfAny(s_achrOpenParenthesesComma);
+            if (intFixedValuesIndex == 0 && strInput[strInput.Length - 1] == ')' && strInput.LastIndexOf("FixedValues(", StringComparison.Ordinal) == 0)
+            {
+                // Simple case that is the most common, so handle separately: single FixedValues() entry that wraps around the entire string
+                strInput = strInput.TrimStartOnce("FixedValues(", true).TrimEndOnce(')');
+                int intIndexInner = strInput.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndexInner < 0)
+                    return strInput;
+                return ProcessFixedValuesStringCore(strInput, intRating, intIndexInner);
+            }
+            string strFirstPart = strInput.Substring(0, intFixedValuesIndex);
+            string strSecondPart = strInput.Substring(intFixedValuesIndex + 13);
+            int intIndex = strSecondPart.IndexOfAny(s_achrParentheses);
             if (intIndex < 0)
-                return strInput;
-            return ProcessFixedValuesStringCore(strInput, intRating, intIndex);
+            {
+                intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndex < 0)
+                    return strFirstPart + strSecondPart;
+                return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRating, intIndex), intRating);
+            }
+            if (strSecondPart[intIndex] != ')')
+            {
+                int intNumParentheses = 1;
+                while (intNumParentheses > 0)
+                {
+                    intIndex = strSecondPart.IndexOfAny(s_achrParentheses, intIndex);
+                    if (intIndex < 0)
+                        break;
+                    switch (strSecondPart[intIndex])
+                    {
+                        case '(':
+                            ++intNumParentheses;
+                            break;
+                        case ')':
+                            --intNumParentheses;
+                            break;
+                    }
+                    ++intIndex;
+                    if (intNumParentheses == 0)
+                    {
+                        intIndex = strSecondPart.IndexOfAny(s_achrParentheses, intIndex);
+                        if (intIndex < 0 || strSecondPart[intIndex] == ')')
+                            break;
+                        ++intIndex;
+                        ++intNumParentheses;
+                    }
+                }
+
+                if (intIndex < 0)
+                {
+                    intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                    if (intIndex < 0)
+                        return strFirstPart + strSecondPart;
+                    return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRating, intIndex), intRating);
+                }
+            }
+
+            // Simple case: we just have to process the entire second half of the string as a single FixedValues
+            if (intIndex + 1 >= strSecondPart.Length)
+            {
+                strSecondPart = strSecondPart.Substring(0, intIndex);
+                intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndex < 0)
+                    return strFirstPart + strSecondPart;
+                return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRating, intIndex), intRating);
+            }
+
+            string strSecondPartA = strSecondPart.Substring(0, intIndex);
+            string strSecondPartB = intIndex + 2 < strSecondPart.Length ? strSecondPart.Substring(intIndex + 2) : string.Empty;
+            intIndex = strSecondPartA.IndexOfAny(s_achrOpenParenthesesComma);
+            if (intIndex < 0)
+                return strFirstPart + strSecondPartA + strSecondPartB;
+            return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPartA, intRating, intIndex), intRating) + ProcessFixedValuesString(strSecondPartB, intRating);
         }
 
         /// <summary>
-        /// Processes a string that begins with FixedValues to return the appropriate value based on the input rating.
+        /// Processes a string containing one or more FixedValues elements to return the appropriate value based on the input rating.
         /// Is also able to handle cases where there are functions with commas inside of the FixedValues string.
         /// </summary>
         /// <param name="strInput">String to process (should not have FixedValues trimmed).</param>
         /// <param name="funcRating">Function to get the rating to use for FixedValues.</param>
         public static string ProcessFixedValuesString(this string strInput, Func<int> funcRating)
         {
-            if (!strInput.StartsWith("FixedValues(", StringComparison.Ordinal))
+            if (string.IsNullOrEmpty(strInput))
+                return string.Empty;
+            int intFixedValuesIndex = strInput.IndexOf("FixedValues(", StringComparison.Ordinal);
+            if (intFixedValuesIndex < 0)
                 return strInput;
-            strInput = strInput.TrimStartOnce("FixedValues(", true).TrimEndOnce(')');
-            int intIndex = strInput.IndexOfAny(s_achrOpenParenthesesComma);
+            if (intFixedValuesIndex == 0 && strInput[strInput.Length - 1] == ')' && strInput.LastIndexOf("FixedValues(", StringComparison.Ordinal) == 0)
+            {
+                // Simple case that is the most common, so handle separately: single FixedValues() entry that wraps around the entire string
+                strInput = strInput.TrimStartOnce("FixedValues(", true).TrimEndOnce(')');
+                int intIndexInner = strInput.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndexInner < 0)
+                    return strInput;
+                return ProcessFixedValuesStringCore(strInput, funcRating(), intIndexInner);
+            }
+            string strFirstPart = strInput.Substring(0, intFixedValuesIndex);
+            string strSecondPart = strInput.Substring(intFixedValuesIndex + 13);
+            int intIndex = strSecondPart.IndexOfAny(s_achrParentheses);
             if (intIndex < 0)
-                return strInput;
-            int intRating = funcRating.Invoke();
-            return ProcessFixedValuesStringCore(strInput, intRating, intIndex);
+            {
+                intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndex < 0)
+                    return strFirstPart + strSecondPart;
+                int intRatingInner = funcRating();
+                return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRatingInner, intIndex), intRatingInner);
+            }
+            if (strSecondPart[intIndex] != ')')
+            {
+                int intNumParentheses = 1;
+                while (intNumParentheses > 0)
+                {
+                    intIndex = strSecondPart.IndexOfAny(s_achrParentheses, intIndex);
+                    if (intIndex < 0)
+                        break;
+                    switch (strSecondPart[intIndex])
+                    {
+                        case '(':
+                            ++intNumParentheses;
+                            break;
+                        case ')':
+                            --intNumParentheses;
+                            break;
+                    }
+                    ++intIndex;
+                    if (intNumParentheses == 0)
+                    {
+                        intIndex = strSecondPart.IndexOfAny(s_achrParentheses, intIndex);
+                        if (intIndex < 0 || strSecondPart[intIndex] == ')')
+                            break;
+                        ++intIndex;
+                        ++intNumParentheses;
+                    }
+                }
+
+                if (intIndex < 0)
+                {
+                    intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                    if (intIndex < 0)
+                        return strFirstPart + strSecondPart;
+                    int intRatingInner = funcRating();
+                    return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRatingInner, intIndex), intRatingInner);
+                }
+            }
+
+            // Simple case: we just have to process the entire second half of the string as a single FixedValues
+            if (intIndex + 1 >= strSecondPart.Length)
+            {
+                strSecondPart = strSecondPart.Substring(0, intIndex);
+                intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndex < 0)
+                    return strFirstPart + strSecondPart;
+                int intRatingInner = funcRating();
+                return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRatingInner, intIndex), intRatingInner);
+            }
+
+            string strSecondPartA = strSecondPart.Substring(0, intIndex);
+            string strSecondPartB = intIndex + 2 < strSecondPart.Length ? strSecondPart.Substring(intIndex + 2) : string.Empty;
+            intIndex = strSecondPartA.IndexOfAny(s_achrOpenParenthesesComma);
+            if (intIndex < 0)
+                return strFirstPart + strSecondPartA + strSecondPartB;
+            int intRating = funcRating();
+            return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPartA, intRating, intIndex), intRating) + ProcessFixedValuesString(strSecondPartB, intRating);
         }
 
         /// <summary>
-        /// Processes a string that begins with FixedValues to return the appropriate value based on the input rating.
+        /// Processes a string containing one or more FixedValues elements to return the appropriate value based on the input rating.
         /// Is also able to handle cases where there are functions with commas inside of the FixedValues string.
         /// </summary>
         /// <param name="strInput">String to process (should not have FixedValues trimmed).</param>
         /// <param name="funcRating">Function to get the rating to use for FixedValues.</param>
         /// <param name="token">Cancellation token to listen to.</param>
-        public static Task<string> ProcessFixedValuesStringAsync(this string strInput, Func<Task<int>> funcRating, CancellationToken token = default)
+        public async static Task<string> ProcessFixedValuesStringAsync(this string strInput, Func<Task<int>> funcRating, CancellationToken token = default)
         {
-            if (token.IsCancellationRequested)
-                return Task.FromCanceled<string>(token);
-            if (!strInput.StartsWith("FixedValues(", StringComparison.Ordinal))
-                return Task.FromResult(strInput);
-            strInput = strInput.TrimStartOnce("FixedValues(", true).TrimEndOnce(')');
-            int intOuterIndex = strInput.IndexOfAny(s_achrOpenParenthesesComma);
-            if (intOuterIndex < 0)
-                return Task.FromResult(strInput);
-            return Inner(intOuterIndex);
-            async Task<string> Inner(int intIndex)
+            token.ThrowIfCancellationRequested();
+            if (string.IsNullOrEmpty(strInput))
+                return string.Empty;
+            int intFixedValuesIndex = strInput.IndexOf("FixedValues(", StringComparison.Ordinal);
+            if (intFixedValuesIndex < 0)
+                return strInput;
+            if (intFixedValuesIndex == 0 && strInput[strInput.Length - 1] == ')' && strInput.LastIndexOf("FixedValues(", StringComparison.Ordinal) == 0)
             {
-                return ProcessFixedValuesStringCore(strInput, await funcRating.Invoke().ConfigureAwait(false), intIndex);
+                // Simple case that is the most common, so handle separately: single FixedValues() entry that wraps around the entire string
+                strInput = strInput.TrimStartOnce("FixedValues(", true).TrimEndOnce(')');
+                int intIndexInner = strInput.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndexInner < 0)
+                    return strInput;
+                return ProcessFixedValuesStringCore(strInput, await funcRating().ConfigureAwait(false), intIndexInner);
             }
+            string strFirstPart = strInput.Substring(0, intFixedValuesIndex);
+            string strSecondPart = strInput.Substring(intFixedValuesIndex + 13);
+            int intIndex = strSecondPart.IndexOfAny(s_achrParentheses);
+            if (intIndex < 0)
+            {
+                intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndex < 0)
+                    return strFirstPart + strSecondPart;
+                int intRatingInner = await funcRating().ConfigureAwait(false);
+                return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRatingInner, intIndex), intRatingInner);
+            }
+            if (strSecondPart[intIndex] != ')')
+            {
+                int intNumParentheses = 1;
+                while (intNumParentheses > 0)
+                {
+                    intIndex = strSecondPart.IndexOfAny(s_achrParentheses, intIndex);
+                    if (intIndex < 0)
+                        break;
+                    switch (strSecondPart[intIndex])
+                    {
+                        case '(':
+                            ++intNumParentheses;
+                            break;
+                        case ')':
+                            --intNumParentheses;
+                            break;
+                    }
+                    ++intIndex;
+                    if (intNumParentheses == 0)
+                    {
+                        intIndex = strSecondPart.IndexOfAny(s_achrParentheses, intIndex);
+                        if (intIndex < 0 || strSecondPart[intIndex] == ')')
+                            break;
+                        ++intIndex;
+                        ++intNumParentheses;
+                    }
+                }
+
+                if (intIndex < 0)
+                {
+                    intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                    if (intIndex < 0)
+                        return strFirstPart + strSecondPart;
+                    int intRatingInner = await funcRating().ConfigureAwait(false);
+                    return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRatingInner, intIndex), intRatingInner);
+                }
+            }
+
+            // Simple case: we just have to process the entire second half of the string as a single FixedValues
+            if (intIndex + 1 >= strSecondPart.Length)
+            {
+                strSecondPart = strSecondPart.Substring(0, intIndex);
+                intIndex = strSecondPart.IndexOfAny(s_achrOpenParenthesesComma);
+                if (intIndex < 0)
+                    return strFirstPart + strSecondPart;
+                int intRatingInner = await funcRating().ConfigureAwait(false);
+                return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPart, intRatingInner, intIndex), intRatingInner);
+            }
+
+            string strSecondPartA = strSecondPart.Substring(0, intIndex);
+            string strSecondPartB = intIndex + 2 < strSecondPart.Length ? strSecondPart.Substring(intIndex + 2) : string.Empty;
+            intIndex = strSecondPartA.IndexOfAny(s_achrOpenParenthesesComma);
+            if (intIndex < 0)
+                return strFirstPart + strSecondPartA + strSecondPartB;
+            int intRating = await funcRating().ConfigureAwait(false);
+            return strFirstPart + ProcessFixedValuesString(ProcessFixedValuesStringCore(strSecondPartA, intRating, intIndex), intRating) + ProcessFixedValuesString(strSecondPartB, intRating);
         }
 
         private static string ProcessFixedValuesStringCore(this string strInput, int intRating, int intIndex)
         {
+            if (string.IsNullOrEmpty(strInput))
+                return string.Empty;
             int intInputLength = strInput.Length;
+            if (intIndex >= intInputLength)
+                return strInput;
             // Function is more complicated than just splitting by commas because we need to be able to ignore commas that are inside of parentheses
             if (intRating <= 1)
             {
                 if (strInput[intIndex] == ',')
                     return strInput.Substring(0, intIndex);
                 ++intIndex;
-                int intNumParatheses = 1;
-                while (intNumParatheses > 0)
+                int intNumParentheses = 1;
+                while (intNumParentheses > 0)
                 {
                     intIndex = strInput.IndexOfAny(s_achrParentheses, intIndex);
                     // Unclosed parantheses before our first comma, so return the entire string
@@ -2637,14 +3140,14 @@ namespace Chummer
                     switch (strInput[intIndex])
                     {
                         case '(':
-                            ++intNumParatheses;
+                            ++intNumParentheses;
                             break;
                         case ')':
-                            --intNumParatheses;
+                            --intNumParentheses;
                             break;
                     }
                     ++intIndex;
-                    if (intNumParatheses == 0)
+                    if (intNumParentheses == 0)
                     {
                         intIndex = strInput.IndexOfAny(s_achrOpenParenthesesComma, intIndex);
                         if (intIndex < 0)
@@ -2652,7 +3155,7 @@ namespace Chummer
                         if (strInput[intIndex] == ',')
                             return strInput.Substring(0, intIndex);
                         ++intIndex;
-                        ++intNumParatheses;
+                        ++intNumParentheses;
                     }
                 }
             }
@@ -2663,8 +3166,8 @@ namespace Chummer
                 if (strInput[intIndex] == ',')
                     return strInput.Substring(intIndex + 1);
                 --intIndex;
-                int intNumParatheses = 1;
-                while (intNumParatheses > 0)
+                int intNumParentheses = 1;
+                while (intNumParentheses > 0)
                 {
                     intIndex = strInput.LastIndexOfAny(s_achrParentheses, 0, intIndex + 1);
                     // Unclosed parantheses before our last comma, so just seek to last comma and split from there
@@ -2678,14 +3181,14 @@ namespace Chummer
                     switch (strInput[intIndex])
                     {
                         case '(':
-                            --intNumParatheses;
+                            --intNumParentheses;
                             break;
                         case ')':
-                            ++intNumParatheses;
+                            ++intNumParentheses;
                             break;
                     }
                     --intIndex;
-                    if (intNumParatheses == 0)
+                    if (intNumParentheses == 0)
                     {
                         intIndex = strInput.LastIndexOfAny(s_achrClosedParenthesesComma, 0, intIndex + 1);
                         if (intIndex <= 0)
@@ -2693,7 +3196,7 @@ namespace Chummer
                         if (strInput[intIndex] == ',')
                             return strInput.Substring(intIndex + 1);
                         --intIndex;
-                        ++intNumParatheses;
+                        ++intNumParentheses;
                     }
                 }
             }
@@ -2714,8 +3217,8 @@ namespace Chummer
                     else
                     {
                         ++intIndex;
-                        int intNumParatheses = 1;
-                        while (intNumParatheses > 0)
+                        int intNumParentheses = 1;
+                        while (intNumParentheses > 0)
                         {
                             intIndex = strInput.IndexOfAny(s_achrParentheses, intIndex);
                             // Unclosed parantheses before our first comma, so skip directly to next comma
@@ -2729,18 +3232,18 @@ namespace Chummer
                                 intLastCommaIndex = intIndex;
                                 break;
                             }
-                            intNumParatheses = 0;
+                            intNumParentheses = 0;
                             switch (strInput[intIndex])
                             {
                                 case '(':
-                                    ++intNumParatheses;
+                                    ++intNumParentheses;
                                     break;
                                 case ')':
-                                    --intNumParatheses;
+                                    --intNumParentheses;
                                     break;
                             }
                             ++intIndex;
-                            if (intNumParatheses == 0)
+                            if (intNumParentheses == 0)
                             {
                                 intIndex = strInput.IndexOfAny(s_achrOpenParenthesesComma, intIndex);
                                 if (intIndex < 0 || intIndex == intInputLength - 1)
@@ -2755,7 +3258,7 @@ namespace Chummer
                                 else
                                 {
                                     ++intIndex;
-                                    ++intNumParatheses;
+                                    ++intNumParentheses;
                                 }
                             }
                         }
@@ -2773,14 +3276,44 @@ namespace Chummer
 
         private static readonly char[] s_achrClosedParenthesesComma = new[] { ')', ',' };
 
-        private static readonly Lazy<Regex> s_RgxHtmlTagExpression = new Lazy<Regex>(() => new Regex(@"/<\/?[a-z][\s\S]*>/i",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant | RegexOptions.Compiled));
+        private static readonly char[] s_achrXmlInvalidUnicodeChars = new[]
+        {
+            '\u0000',
+            '\u0001',
+            '\u0002',
+            '\u0003',
+            '\u0004',
+            '\u0005',
+            '\u0006',
+            '\u0007',
+            '\u0008',
+            '\u000B',
+            '\u000C',
+            '\u000E',
+            '\u000F',
+            '\u0010',
+            '\u0011',
+            '\u0012',
+            '\u0013',
+            '\u0014',
+            '\u0015',
+            '\u0016',
+            '\u0017',
+            '\u0018',
+            '\u0019',
+            '\u001A',
+            '\u001B',
+            '\u001C',
+            '\u001D',
+            '\u001E',
+            '\u001F'
+        };
 
-        private static readonly Lazy<Regex> s_RgxLineEndingsExpression = new Lazy<Regex>(() => new Regex(@"\r\n|\n\r|\n|\r",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant | RegexOptions.Compiled));
+        // Order is important so that we replace composites before chars
+        private static readonly string[] s_astrLineEndingStrings = new[] { "\r\n", "\n\r", "\n", "\r" };
 
-        private static readonly Lazy<Regex> s_RgxEscapedLineEndingsExpression = new Lazy<Regex>(() => new Regex(@"\\r\\n|\\n\\r|\\n|\\r",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant | RegexOptions.Compiled));
+        // Order is important so that we replace composites before chars
+        private static readonly string[] s_astrEscapedLineEndingStrings = new[] { "\\\r\\\n", "\\\n\\\r", "\\\n", "\\\r" };
 
         private static readonly DebuggableSemaphoreSlim s_RtbRtfManipulatorLock = new DebuggableSemaphoreSlim();
         private static readonly Lazy<RichTextBox> s_RtbRtfManipulator = new Lazy<RichTextBox>(() => Utils.RunOnMainThread(() => new RichTextBox(), token: CancellationToken.None));
@@ -2960,6 +3493,10 @@ namespace Chummer
         private static readonly Lazy<Regex> s_RtfStripperRegex = new Lazy<Regex>(() => new Regex(
             @"\\([a-z]{1,32})(-?\d{1,10})?[ ]?|\\'([0-9a-f]{2})|\\([^a-z])|([{}])|[\r\n]+|(.)",
             RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant | RegexOptions.Compiled));
+
+        private static readonly Lazy<Regex> s_RtfColorsRegex = new Lazy<Regex>(() => new Regex(
+            @"\\red(\d+)\\green(\d+)\\blue(\d+);",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled));
 
         private static readonly IReadOnlyCollection<string> s_SetRtfDestinations = new HashSet<string>
         {

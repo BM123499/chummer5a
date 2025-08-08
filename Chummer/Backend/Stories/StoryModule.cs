@@ -466,7 +466,7 @@ namespace Chummer
                     }
                     case "$CharacterGrammaticalGender":
                     {
-                        return _objCharacter.CharacterGrammaticGender;
+                        return await _objCharacter.GetCharacterGrammaticGenderAsync(token).ConfigureAwait(false);
                     }
                     case "$Metatype":
                     {
@@ -533,7 +533,7 @@ namespace Chummer
                                     }
                                     ++intIndex;
                                 }
-                                return strName;
+                                return strReturn;
                             }
 
                             return strName;

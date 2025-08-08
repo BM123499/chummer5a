@@ -1029,16 +1029,14 @@ namespace Chummer
                             //the config is invalid - reset it!
                             Properties.Settings.Default.Reset();
                             Properties.Settings.Default.Save();
-                            Log.Warn(
-                                "Configuration Settings were invalid and had to be reset. Exception: " + ex.Message);
+                            Log.Warn(ex, "Configuration Settings were invalid and had to be reset.");
                         }
                         catch (System.Configuration.ConfigurationErrorsException ex)
                         {
                             //the config is invalid - reset it!
                             Properties.Settings.Default.Reset();
                             Properties.Settings.Default.Save();
-                            Log.Warn(
-                                "Configuration Settings were invalid and had to be reset. Exception: " + ex.Message);
+                            Log.Warn(ex, "Configuration Settings were invalid and had to be reset");
                         }
 
                         if (Properties.Settings.Default.Size.Width == 0 || Properties.Settings.Default.Size.Height == 0
@@ -1870,6 +1868,11 @@ namespace Chummer
         private void mnuHelpDumpshock_Click(object sender, EventArgs e)
         {
             Process.Start(new ProcessStartInfo("https://github.com/chummer5a/chummer5a/issues/") { UseShellExecute = true });
+        }
+
+        private void mnuReportBug_Click(object sender, EventArgs e)
+        {
+            Process.Start(new ProcessStartInfo("https://github.com/chummer5a/chummer5a/issues/new/choose") { UseShellExecute = true });
         }
 
         public PrintMultipleCharacters PrintMultipleCharactersForm { get; private set; }

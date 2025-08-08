@@ -29,7 +29,6 @@ using System.Xml.XPath;
 using Chummer.Backend.Attributes;
 using Chummer.Backend.Equipment;
 using Chummer.Backend.Skills;
-using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
 
 namespace Chummer
 {
@@ -271,51 +270,59 @@ namespace Chummer
                     int intLimit = 1;
                     if (strLimitString.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                     {
-                        using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
-                                                                      out StringBuilder sbdLimitString))
+                        if (strLimitString.HasValuesNeedingReplacementForXPathProcessing())
                         {
-                            sbdLimitString.Append(strLimitString);
-                            if (blnSync)
+                            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
+                                                                      out StringBuilder sbdLimitString))
                             {
-                                // ReSharper disable MethodHasAsyncOverload
-                                objCharacter.AttributeSection.ProcessAttributesInXPath(
-                                    sbdLimitString, strLimitString, token: token);
-                                foreach (string strLimb in Character.LimbStrings)
+                                sbdLimitString.Append(strLimitString);
+                                if (blnSync)
                                 {
-                                    // ReSharper disable once MethodHasAsyncOverloadWithCancellation
-                                    sbdLimitString.CheapReplace(strLimitString, '{' + strLimb + '}',
-                                                                () => (string.IsNullOrEmpty(strLocation)
-                                                                        ? objCharacter.LimbCount(strLimb)
-                                                                        : objCharacter.LimbCount(strLimb) / 2)
-                                                                    .ToString(GlobalSettings.InvariantCultureInfo));
+                                    foreach (string strLimb in Character.LimbStrings)
+                                    {
+                                        // ReSharper disable once MethodHasAsyncOverloadWithCancellation
+                                        sbdLimitString.CheapReplace(strLimitString, '{' + strLimb + '}',
+                                                                    () => (string.IsNullOrEmpty(strLocation)
+                                                                            ? objCharacter.LimbCount(strLimb)
+                                                                            : objCharacter.LimbCount(strLimb) / 2)
+                                                                        .ToString(GlobalSettings.InvariantCultureInfo));
+                                    }
+                                    // ReSharper disable once MethodHasAsyncOverload
+                                    objCharacter.ProcessAttributesInXPath(
+                                        sbdLimitString, strLimitString, token: token);
                                 }
-
-                                (bool blnIsSuccess, object objProcess)
-                                    = CommonFunctions.EvaluateInvariantXPath(sbdLimitString.ToString(), token);
-                                intLimit = blnIsSuccess ? ((double)objProcess).StandardRound() : 1;
-                                // ReSharper restore MethodHasAsyncOverload
-                            }
-                            else
-                            {
-                                await (await objCharacter.GetAttributeSectionAsync(token).ConfigureAwait(false))
-                                      .ProcessAttributesInXPathAsync(
-                                          sbdLimitString, strLimitString, token: token).ConfigureAwait(false);
-                                foreach (string strLimb in Character.LimbStrings)
+                                else
                                 {
-                                    await sbdLimitString.CheapReplaceAsync(strLimitString, '{' + strLimb + '}',
-                                                                           () => (string.IsNullOrEmpty(strLocation)
-                                                                                   ? objCharacter.LimbCount(strLimb)
-                                                                                   : objCharacter.LimbCount(strLimb) / 2)
-                                                                               .ToString(
-                                                                                   GlobalSettings.InvariantCultureInfo),
-                                                                           token: token).ConfigureAwait(false);
+                                    foreach (string strLimb in Character.LimbStrings)
+                                    {
+                                        await sbdLimitString.CheapReplaceAsync(strLimitString, '{' + strLimb + '}',
+                                                                               () => (string.IsNullOrEmpty(strLocation)
+                                                                                       ? objCharacter.LimbCount(strLimb)
+                                                                                       : objCharacter.LimbCount(strLimb) / 2)
+                                                                                   .ToString(
+                                                                                       GlobalSettings.InvariantCultureInfo),
+                                                                               token: token).ConfigureAwait(false);
+                                    }
+                                   await objCharacter
+                                          .ProcessAttributesInXPathAsync(
+                                              sbdLimitString, strLimitString, token: token).ConfigureAwait(false);
                                 }
-
-                                (bool blnIsSuccess, object objProcess)
-                                    = await CommonFunctions.EvaluateInvariantXPathAsync(sbdLimitString.ToString(), token)
-                                                           .ConfigureAwait(false);
-                                intLimit = blnIsSuccess ? ((double)objProcess).StandardRound() : 1;
+                                strLimitString = sbdLimitString.ToString();
                             }
+                        }
+                        if (blnSync)
+                        {
+                            (bool blnIsSuccess, object objProcess)
+                                = CommonFunctions.EvaluateInvariantXPath(strLimitString, token);
+                            intLimit = blnIsSuccess ? ((double)objProcess).StandardRound() : 1;
+                            // ReSharper restore MethodHasAsyncOverload
+                        }
+                        else
+                        {
+                            (bool blnIsSuccess, object objProcess)
+                                = await CommonFunctions.EvaluateInvariantXPathAsync(strLimitString, token)
+                                                       .ConfigureAwait(false);
+                            intLimit = blnIsSuccess ? ((double)objProcess).StandardRound() : 1;
                         }
                     }
                     else
@@ -788,7 +795,7 @@ namespace Chummer
                             xmlNode.SelectSingleNodeAndCacheExpression("total", token)?.ValueAsInt ?? 0;
                         if (blnShowMessage)
                             strName = string.Format(GlobalSettings.CultureInfo, "{0}\t{1}{2}{3}", Environment.NewLine,
-                                objAttribute?.DisplayAbbrev ?? objCharacter.TranslateExtra(strNodeName, token: token),
+                                objAttribute?.CurrentDisplayAbbrev ?? objCharacter.TranslateExtra(strNodeName, token: token),
                                 strSpace, intTargetValue);
 
                         if (xmlNode.SelectSingleNodeAndCacheExpression("natural", token) != null)
@@ -809,7 +816,7 @@ namespace Chummer
                         if (blnShowMessage)
                             strName = string.Format(GlobalSettings.CultureInfo, "{0}\t{1}{2}{3}", Environment.NewLine,
                                 objAttribute != null
-                                    ? await objAttribute.GetDisplayAbbrevAsync(GlobalSettings.Language, token)
+                                    ? await objAttribute.GetCurrentDisplayAbbrevAsync(token)
                                         .ConfigureAwait(false)
                                     : await objCharacter.TranslateExtraAsync(strNodeName, token: token)
                                         .ConfigureAwait(false), strSpace, intTargetValue);
@@ -839,14 +846,20 @@ namespace Chummer
                         if (strNodeAttributes.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                         {
                             // Check if the character's Attributes add up to a particular total.
-                            string strValue
-                                = objCharacter.AttributeSection.ProcessAttributesInXPath(strNodeAttributes, token: token);
-                            if (blnShowMessage)
+                            string strValue = strNodeAttributes;
+                            if (strValue.HasValuesNeedingReplacementForXPathProcessing())
+                            {
+                                strValue = objCharacter.ProcessAttributesInXPath(strValue, token: token);
+                                if (blnShowMessage)
+                                    strName = string.Format(GlobalSettings.CultureInfo, "{0}\t{2}{1}{3}", Environment.NewLine,
+                                        strSpace,
+                                        objCharacter.ProcessAttributesInXPathForTooltip(
+                                            strNodeAttributes,
+                                            blnShowValues: false, token: token), intNodeVal);
+                            }
+                            else if(blnShowMessage)
                                 strName = string.Format(GlobalSettings.CultureInfo, "{0}\t{2}{1}{3}", Environment.NewLine,
-                                    strSpace,
-                                    objCharacter.AttributeSection.ProcessAttributesInXPathForTooltip(
-                                        strNodeAttributes,
-                                        blnShowValues: false, token: token), intNodeVal);
+                                    strSpace, strValue, intNodeVal);
                             (bool blnIsSuccess, object objProcess)
                                 = CommonFunctions.EvaluateInvariantXPath(strValue, token);
                             return new Tuple<bool, string>(
@@ -865,20 +878,28 @@ namespace Chummer
                         int intNodeVal = xmlNode.SelectSingleNodeAndCacheExpression("val", token)?.ValueAsInt ?? 0;
                         if (strNodeAttributes.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                         {
-                            // Check if the character's Attributes add up to a particular total.
-                            AttributeSection objAttributeSection =
-                                await objCharacter.GetAttributeSectionAsync(token).ConfigureAwait(false);
-                            string strValue
-                                = await objAttributeSection.ProcessAttributesInXPathAsync(strNodeAttributes, token: token)
-                                    .ConfigureAwait(false);
-                            if (blnShowMessage)
+                            string strValue = strNodeAttributes;
+                            if (strValue.HasValuesNeedingReplacementForXPathProcessing())
+                            {
+                                // Check if the character's Attributes add up to a particular total.
+                                strValue
+                                    = await objCharacter.ProcessAttributesInXPathAsync(strNodeAttributes, token: token)
+                                        .ConfigureAwait(false);
+                                if (blnShowMessage)
+                                    strName = string.Format(GlobalSettings.CultureInfo, "{0}\t{2}{1}{3}", Environment.NewLine,
+                                        strSpace,
+                                        await objCharacter.ProcessAttributesInXPathForTooltipAsync(
+                                            strNodeAttributes,
+                                            blnShowValues: false, token: token).ConfigureAwait(false), intNodeVal);
+                            }
+                            else if (blnShowMessage)
+                            {
                                 strName = string.Format(GlobalSettings.CultureInfo, "{0}\t{2}{1}{3}", Environment.NewLine,
                                     strSpace,
-                                    await objAttributeSection.ProcessAttributesInXPathForTooltipAsync(
-                                        strNodeAttributes,
-                                        blnShowValues: false, token: token).ConfigureAwait(false), intNodeVal);
+                                    strValue, intNodeVal);
+                            }
                             (bool blnIsSuccess, object objProcess)
-                                = await CommonFunctions.EvaluateInvariantXPathAsync(strValue, token).ConfigureAwait(false);
+                                    = await CommonFunctions.EvaluateInvariantXPathAsync(strValue, token).ConfigureAwait(false);
                             return new Tuple<bool, string>(
                                 (blnIsSuccess ? ((double)objProcess).StandardRound() : 0) >= intNodeVal, strName);
                         }
@@ -899,7 +920,9 @@ namespace Chummer
                                 : await LanguageManager.GetStringAsync("Message_SelectQuality_RequireKarma",
                                     token: token).ConfigureAwait(false),
                             strNodeInnerText);
-                    return new Tuple<bool, string>(objCharacter.CareerKarma >= xmlNode.ValueAsInt, strName);
+                    return new Tuple<bool, string>((blnSync
+                        ? objCharacter.CareerKarma
+                        : await objCharacter.GetCareerKarmaAsync(token).ConfigureAwait(false)) >= xmlNode.ValueAsInt, strName);
                 }
                 case "chargenonly":
                 {
@@ -3308,41 +3331,34 @@ namespace Chummer
                     }
                     else
                     {
+                        List<Weapon> lstWeapons = new List<Weapon>();
                         foreach (Weapon objWeapon in await (await objCharacter.GetWeaponsAsync(token)
                                      .ConfigureAwait(false)).GetAllDescendantsAsync(
                                      x => x.UnderbarrelWeapons, token).ConfigureAwait(false))
                         {
-                            intMods += await objWeapon.WeaponAccessories.CountAsync(x => x.SpecialModification, token)
-                                .ConfigureAwait(false);
+                            lstWeapons.Add(objWeapon);
                         }
 
-                        intMods += await (await objCharacter.GetVehiclesAsync(token).ConfigureAwait(false)).SumAsync(
-                            async objVehicle =>
+                        await (await objCharacter.GetVehiclesAsync(token).ConfigureAwait(false)).ForEachAsync(async objVehicle =>
+                        {
+                            foreach (Weapon objWeapon in await objVehicle.Weapons
+                                            .GetAllDescendantsAsync(x => x.UnderbarrelWeapons, token)
+                                            .ConfigureAwait(false))
                             {
-                                int intInnerSum = 0;
-                                foreach (Weapon objWeapon in await objVehicle.Weapons
-                                             .GetAllDescendantsAsync(x => x.UnderbarrelWeapons, token)
-                                             .ConfigureAwait(false))
+                                lstWeapons.Add(objWeapon);
+                            }
+
+                            await objVehicle.WeaponMounts.ForEachAsync(async objMount =>
+                            {
+                                foreach (Weapon objWeapon in await objMount.Weapons.GetAllDescendantsAsync(
+                                                x => x.UnderbarrelWeapons, token).ConfigureAwait(false))
                                 {
-                                    intInnerSum += await objWeapon.WeaponAccessories
-                                        .CountAsync(x => x.SpecialModification, token).ConfigureAwait(false);
+                                    lstWeapons.Add(objWeapon);
                                 }
-
-                                intInnerSum += await objVehicle.WeaponMounts.SumAsync(async objMount =>
-                                {
-                                    int intInnerSum2 = 0;
-                                    foreach (Weapon objWeapon in await objMount.Weapons.GetAllDescendantsAsync(
-                                                 x => x.UnderbarrelWeapons, token).ConfigureAwait(false))
-                                    {
-                                        intInnerSum2 += await objWeapon.WeaponAccessories.CountAsync(
-                                            x => x.SpecialModification, token).ConfigureAwait(false);
-                                    }
-
-                                    return intInnerSum2;
-                                }, token).ConfigureAwait(false);
-
-                                return intInnerSum;
                             }, token).ConfigureAwait(false);
+                        }, token).ConfigureAwait(false);
+                        foreach (Weapon objWeapon in lstWeapons)
+                            intMods += await objWeapon.WeaponAccessories.CountAsync(x => x.SpecialModification, token).ConfigureAwait(false);
                     }
 
                     if (blnShowMessage)
@@ -3360,7 +3376,7 @@ namespace Chummer
                     }
 
                     return new Tuple<bool, string>(
-                        intMods + xmlNode.ValueAsInt <= objCharacter.SpecialModificationLimit, strName);
+                        intMods + xmlNode.ValueAsInt <= (blnSync ? objCharacter.SpecialModificationLimit : await objCharacter.GetSpecialModificationLimitAsync(token).ConfigureAwait(false)), strName);
                 }
                 case "spell":
                 {
@@ -3861,7 +3877,9 @@ namespace Chummer
 
             // If avail contains "F" or "R", remove it from the string so we can use the expression.
             string strAvailExpr = objAvailNode?.Value ?? string.Empty;
-            strAvailExpr = strAvailExpr.ProcessFixedValuesString(intRating);
+            strAvailExpr = strAvailExpr.ProcessFixedValuesString(intRating)
+                .Replace("{Rating}", intRating.ToString(GlobalSettings.InvariantCultureInfo))
+                .Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo));
 
             if (string.IsNullOrEmpty(strAvailExpr))
                 return true;
@@ -3873,7 +3891,8 @@ namespace Chummer
             int intAvail = intAvailModifier;
             if (strAvailExpr.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
             {
-                (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strAvailExpr.Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo)));
+                strAvailExpr = objCharacter.ProcessAttributesInXPath(strAvailExpr);
+                (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strAvailExpr);
                 if (blnIsSuccess)
                     intAvail += ((double)objProcess).StandardRound();
             }
@@ -3938,7 +3957,9 @@ namespace Chummer
 
             // If avail contains "F" or "R", remove it from the string so we can use the expression.
             string strAvailExpr = objAvailNode?.Value ?? string.Empty;
-            strAvailExpr = strAvailExpr.ProcessFixedValuesString(intRating);
+            strAvailExpr = strAvailExpr.ProcessFixedValuesString(intRating)
+                .Replace("{Rating}", intRating.ToString(GlobalSettings.InvariantCultureInfo))
+                .Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo));
 
             if (string.IsNullOrEmpty(strAvailExpr))
                 return true;
@@ -3950,18 +3971,19 @@ namespace Chummer
             int intAvail = intAvailModifier;
             if (strAvailExpr.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
             {
-                (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strAvailExpr.Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo)), token).ConfigureAwait(false);
+                strAvailExpr = await objCharacter.ProcessAttributesInXPathAsync(strAvailExpr, token: token).ConfigureAwait(false);
+                (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strAvailExpr, token).ConfigureAwait(false);
                 if (blnIsSuccess)
                     intAvail += ((double)objProcess).StandardRound();
             }
             else
                 intAvail += decValue.StandardRound();
-            return intAvail <= await objCharacter.Settings.GetMaximumAvailabilityAsync(token).ConfigureAwait(false);
+            return intAvail <= await (await objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMaximumAvailabilityAsync(token).ConfigureAwait(false);
         }
 
-        public static bool CheckNuyenRestriction(XmlNode objXmlGear, decimal decMaxNuyen, decimal decCostMultiplier = 1.0m, int intRating = 1)
+        public static bool CheckNuyenRestriction(XmlNode objXmlGear, Character objCharacter, decimal decMaxNuyen, decimal decCostMultiplier = 1.0m, int intRating = 1)
         {
-            return objXmlGear?.CreateNavigator().CheckNuyenRestriction(decMaxNuyen, decCostMultiplier, intRating) == true;
+            return objXmlGear?.CreateNavigator().CheckNuyenRestriction(objCharacter, decMaxNuyen, decCostMultiplier, intRating) == true;
         }
 
         /// <summary>
@@ -3972,7 +3994,7 @@ namespace Chummer
         /// <param name="decCostMultiplier">Multiplier of the object's cost value.</param>
         /// <param name="intRating">Effective Rating of the object.</param>
         /// <returns>Returns False if not permitted with the current restrictions. Returns True if valid.</returns>
-        public static bool CheckNuyenRestriction(this XPathNavigator objXmlGear, decimal decMaxNuyen, decimal decCostMultiplier = 1.0m, int intRating = 1)
+        public static bool CheckNuyenRestriction(this XPathNavigator objXmlGear, Character objCharacter, decimal decMaxNuyen, decimal decCostMultiplier = 1.0m, int intRating = 1)
         {
             if (objXmlGear == null)
                 return false;
@@ -3998,7 +4020,9 @@ namespace Chummer
             string strCost = objCostNode?.Value;
             if (!string.IsNullOrEmpty(strCost))
             {
-                strCost = strCost.ProcessFixedValuesString(intRating);
+                strCost = strCost.ProcessFixedValuesString(intRating)
+                    .Replace("{Rating}", intRating.ToString(GlobalSettings.InvariantCultureInfo))
+                    .Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo));
                 if (strCost.StartsWith("Variable", StringComparison.Ordinal))
                 {
                     strCost = strCost.TrimStartOnce("Variable(", true).TrimEndOnce(')');
@@ -4007,7 +4031,8 @@ namespace Chummer
                 }
                 if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decCost))
                 {
-                    (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strCost.Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo)));
+                    strCost = objCharacter.ProcessAttributesInXPath(strCost);
+                    (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strCost);
                     if (blnIsSuccess)
                         decCost = Convert.ToDecimal((double)objProcess);
                 }
@@ -4015,11 +4040,11 @@ namespace Chummer
             return decMaxNuyen >= decCost * decCostMultiplier;
         }
 
-        public static async Task<bool> CheckNuyenRestrictionAsync(XmlNode objXmlGear, decimal decMaxNuyen, decimal decCostMultiplier = 1.0m, int intRating = 1, CancellationToken token = default)
+        public static async Task<bool> CheckNuyenRestrictionAsync(XmlNode objXmlGear, Character objCharacter, decimal decMaxNuyen, decimal decCostMultiplier = 1.0m, int intRating = 1, CancellationToken token = default)
         {
             return objXmlGear != null && await objXmlGear.CreateNavigator()
                                                          .CheckNuyenRestrictionAsync(
-                                                             decMaxNuyen, decCostMultiplier, intRating, token).ConfigureAwait(false);
+                                                             objCharacter, decMaxNuyen, decCostMultiplier, intRating, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -4031,7 +4056,7 @@ namespace Chummer
         /// <param name="intRating">Effective Rating of the object.</param>
         /// <param name="token">Cancellation token to listen to.</param>
         /// <returns>Returns False if not permitted with the current restrictions. Returns True if valid.</returns>
-        public static async Task<bool> CheckNuyenRestrictionAsync(this XPathNavigator objXmlGear, decimal decMaxNuyen, decimal decCostMultiplier = 1.0m, int intRating = 1, CancellationToken token = default)
+        public static async Task<bool> CheckNuyenRestrictionAsync(this XPathNavigator objXmlGear, Character objCharacter, decimal decMaxNuyen, decimal decCostMultiplier = 1.0m, int intRating = 1, CancellationToken token = default)
         {
             if (objXmlGear == null)
                 return false;
@@ -4057,7 +4082,9 @@ namespace Chummer
             string strCost = objCostNode?.Value;
             if (!string.IsNullOrEmpty(strCost))
             {
-                strCost = strCost.ProcessFixedValuesString(intRating);
+                strCost = strCost.ProcessFixedValuesString(intRating)
+                    .Replace("{Rating}", intRating.ToString(GlobalSettings.InvariantCultureInfo))
+                    .Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo));
                 if (strCost.StartsWith("Variable", StringComparison.Ordinal))
                 {
                     strCost = strCost.TrimStartOnce("Variable(", true).TrimEndOnce(')');
@@ -4066,7 +4093,8 @@ namespace Chummer
                 }
                 if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decCost))
                 {
-                    (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strCost.Replace("Rating", intRating.ToString(GlobalSettings.InvariantCultureInfo)), token).ConfigureAwait(false);
+                    strCost = await objCharacter.ProcessAttributesInXPathAsync(strCost, token: token).ConfigureAwait(false);
+                    (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strCost, token).ConfigureAwait(false);
                     if (blnIsSuccess)
                         decCost = Convert.ToDecimal((double)objProcess);
                 }

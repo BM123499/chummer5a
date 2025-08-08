@@ -1455,6 +1455,10 @@
       <text>Issue Tracker</text>
     </string>
     <string>
+      <key>Menu_Main_ReportBug</key>
+      <text>Report a &amp;Bug</text>
+    </string>
+    <string>
       <key>Menu_Main_File</key>
       <text>&amp;File</text>
     </string>
@@ -8623,6 +8627,10 @@
     <string>
       <key>MessageTitle_SelectBP_SwitchBuildMethods</key>
       <text>Switch Build Method?</text>
+    </string>
+    <string>
+      <key>String_ModifyEllipses</key>
+      <text>Modify...</text>
     </string>
     <!-- End Region-->
     <!-- Region Advanced Contact Options Window -->

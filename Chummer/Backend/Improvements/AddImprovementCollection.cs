@@ -17,10 +17,10 @@
  *  https://github.com/chummer5a/chummer5a
  */
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Windows.Forms;
 using System.Xml;
@@ -5366,8 +5366,7 @@ namespace Chummer
                 string strCount = bonusNode.Attributes?["count"]?.InnerText;
                 if (strCount.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
                 {
-                    strCount = _objCharacter.AttributeSection.ProcessAttributesInXPath(strCount);
-
+                    strCount = _objCharacter.ProcessAttributesInXPath(strCount);
                     (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strCount);
                     powerCount = blnIsSuccess ? ((double)objProcess).StandardRound() : 1;
                 }
@@ -7048,6 +7047,10 @@ namespace Chummer
         }
 
         public AbortedException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
+
+        private AbortedException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
     }

@@ -424,7 +424,7 @@ namespace Chummer
                                             _intAutosaveTimeoutsCount =
                                                 0; // We have successfully autosaved once, stop timing out
                                     }
-                                    catch (OperationCanceledException)
+                                    catch (OperationCanceledException ex)
                                     {
                                         if (objTimeoutSource.IsCancellationRequested)
                                         {
@@ -434,12 +434,12 @@ namespace Chummer
                                             {
                                                 if (intAutosaveTimeoutsCount >= MaximumAutosaveTimeouts)
                                                 {
-                                                    Log.Error("Autosave timed out too many times for character " +
+                                                    Log.Error(ex, "Autosave timed out too many times for character " +
                                                               strCharacterName + " (" + strAutosaveFileName + ')');
                                                 }
                                                 else
                                                 {
-                                                    Log.Info("Autosave timed out for character " + strCharacterName +
+                                                    Log.Info(ex, "Autosave timed out for character " + strCharacterName +
                                                              " (" + strAutosaveFileName + ')');
                                                 }
                                             }
@@ -2478,7 +2478,7 @@ namespace Chummer
                         await CharacterObject.Qualities.ForEachAsync(async objQuality =>
                         {
                             setQualitiesToPrint.Add(objQuality.SourceIDString + '|' +
-                                                    await objQuality.GetSourceNameAsync(GlobalSettings.Language, token)
+                                                    await objQuality.DisplaySourceNameAsync(GlobalSettings.Language, token)
                                                                     .ConfigureAwait(false) + '|' +
                                                     objQuality.Extra);
                         }, token).ConfigureAwait(false);
@@ -2488,7 +2488,7 @@ namespace Chummer
                         {
                             if (!setQualitiesToPrint.Remove(objQuality.SourceIDString + '|' +
                                                             await objQuality
-                                                                  .GetSourceNameAsync(GlobalSettings.Language, token)
+                                                                  .DisplaySourceNameAsync(GlobalSettings.Language, token)
                                                                   .ConfigureAwait(false)
                                                             + '|' +
                                                             objQuality.Extra))
@@ -10198,7 +10198,7 @@ namespace Chummer
                                    await x.GetBoundAsync(token).ConfigureAwait(false) && !await x.GetFetteredAsync(token).ConfigureAwait(false), token).ConfigureAwait(false) >=
                 await CharacterObject.GetBoundSpiritLimitAsync(token).ConfigureAwait(false))
             {
-                string strExpression = await CharacterObject.AttributeSection.ProcessAttributesInXPathForTooltipAsync(
+                string strExpression = await CharacterObject.ProcessAttributesInXPathForTooltipAsync(
                     await CharacterObject.Settings.GetBoundSpiritExpressionAsync(token).ConfigureAwait(false), token: token).ConfigureAwait(false);
                 await Program.ShowScrollableMessageBoxAsync(
                     this,
@@ -10233,7 +10233,7 @@ namespace Chummer
                                    await x.GetBoundAsync(token).ConfigureAwait(false) && !await x.GetFetteredAsync(token).ConfigureAwait(false), token).ConfigureAwait(false) >=
                 await CharacterObject.GetRegisteredSpriteLimitAsync(token).ConfigureAwait(false))
             {
-                string strExpression = await CharacterObject.AttributeSection.ProcessAttributesInXPathForTooltipAsync(
+                string strExpression = await CharacterObject.ProcessAttributesInXPathForTooltipAsync(
                     await CharacterObject.Settings.GetRegisteredSpriteExpressionAsync(token).ConfigureAwait(false), token: token).ConfigureAwait(false);
                 await Program.ShowScrollableMessageBoxAsync(
                     this,
@@ -11502,7 +11502,7 @@ namespace Chummer
                             XmlNode objXmlNode = objVehiclesDoc.SelectSingleNode("/chummer/mods/mod[name = \"Retrofit\"]");
                             await objRetrofit.CreateAsync(objXmlNode, 0, objMod.Parent, token: token).ConfigureAwait(false);
                             objRetrofit.Cost = decCost.ToString(GlobalSettings.InvariantCultureInfo);
-                            objRetrofit.IncludedInVehicle = true;
+                            await objRetrofit.SetIncludedInVehicleAsync(true, token).ConfigureAwait(false);
                             await objMod.Parent.Mods.AddAsync(objRetrofit, token).ConfigureAwait(false);
 
                             if (await CharacterObject.GetCreatedAsync(token).ConfigureAwait(false))

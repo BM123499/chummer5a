@@ -35,7 +35,7 @@ using NLog;
 
 namespace Chummer.Backend.Equipment
 {
-    [DebuggerDisplay("{CurrentDisplayName}")]
+    [DebuggerDisplay("{DisplayName(\"en-us\")}")]
     public sealed class LifestyleQuality : IHasInternalId, IHasName, IHasSourceId, IHasXmlDataNode, IHasNotes, IHasSource, ICanRemove, INotifyMultiplePropertiesChangedAsync, IHasLockObject, IHasCharacterObject
     {
         private static readonly Lazy<Logger> s_ObjLogger = new Lazy<Logger>(LogManager.GetCurrentClassLogger);
@@ -447,7 +447,7 @@ namespace Chummer.Backend.Equipment
                     objWriter.WriteRaw("<bonus>" + Bonus.InnerXml + "</bonus>");
                 else
                     objWriter.WriteElementString("bonus", string.Empty);
-                objWriter.WriteElementString("notes", _strNotes.CleanOfInvalidUnicodeChars());
+                objWriter.WriteElementString("notes", _strNotes.CleanOfXmlInvalidUnicodeChars());
                 objWriter.WriteElementString("notesColor", ColorTranslator.ToHtml(_colNotes));
                 objWriter.WriteEndElement();
             }
@@ -1379,6 +1379,7 @@ namespace Chummer.Backend.Equipment
                     string strCost = CostString;
                     if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decReturn))
                     {
+                        strCost = _objCharacter.ProcessAttributesInXPath(strCost);
                         (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strCost);
                         if (blnIsSuccess)
                             return Convert.ToDecimal((double)objProcess);
@@ -1401,6 +1402,7 @@ namespace Chummer.Backend.Equipment
                 string strCost = CostString;
                 if (strCost.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decReturn))
                 {
+                    strCost = await _objCharacter.ProcessAttributesInXPathAsync(strCost, token: token).ConfigureAwait(false);
                     (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strCost, token).ConfigureAwait(false);
                     if (blnIsSuccess)
                         return Convert.ToDecimal((double)objProcess);
@@ -1425,6 +1427,8 @@ namespace Chummer.Backend.Equipment
                 if (CostFree)
                     return LanguageManager.GetString("Checkbox_Free", strLanguage);
                 string strReturn = string.Empty;
+                if (objCulture == null)
+                    objCulture = GlobalSettings.CultureInfo;
                 int intMultiplier = Multiplier;
                 if (intMultiplier != 0)
                 {
@@ -1457,6 +1461,8 @@ namespace Chummer.Backend.Equipment
                 if (await GetCostFreeAsync(token).ConfigureAwait(false))
                     return await LanguageManager.GetStringAsync("Checkbox_Free", strLanguage, token: token).ConfigureAwait(false);
                 string strReturn = string.Empty;
+                if (objCulture == null)
+                    objCulture = GlobalSettings.CultureInfo;
                 int intMultiplier = await GetMultiplierAsync(token).ConfigureAwait(false);
                 if (intMultiplier != 0)
                 {
