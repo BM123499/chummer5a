@@ -355,7 +355,7 @@ namespace Chummer
             int intEarliestNeedleIndex = intHaystackLength;
             foreach (string strNeedle in astrNeedles)
             {
-                int intNeedleIndex = strHaystack.IndexOf(strNeedle, intStartIndex, Math.Min(intHaystackLength, intEarliestNeedleIndex + strNeedle.Length), eComparison);
+                int intNeedleIndex = strHaystack.IndexOf(strNeedle, intStartIndex, Math.Min(intHaystackLength, intEarliestNeedleIndex + strNeedle.Length) - intStartIndex, eComparison);
                 if (intNeedleIndex >= 0 && intNeedleIndex < intEarliestNeedleIndex)
                     intEarliestNeedleIndex = intNeedleIndex;
             }
@@ -398,7 +398,7 @@ namespace Chummer
             int intEarliestNeedleIndex = intHaystackLength;
             foreach (string strNeedle in astrNeedles)
             {
-                int intNeedleIndex = strHaystack.IndexOf(strNeedle, intStartIndex, Math.Min(intHaystackLength, intEarliestNeedleIndex + strNeedle.Length), eComparison);
+                int intNeedleIndex = strHaystack.IndexOf(strNeedle, intStartIndex, Math.Min(intHaystackLength, intEarliestNeedleIndex + strNeedle.Length) - intStartIndex, eComparison);
                 if (intNeedleIndex >= 0 && intNeedleIndex < intEarliestNeedleIndex)
                     intEarliestNeedleIndex = intNeedleIndex;
             }
@@ -3313,7 +3313,7 @@ namespace Chummer
         private static readonly string[] s_astrLineEndingStrings = new[] { "\r\n", "\n\r", "\n", "\r" };
 
         // Order is important so that we replace composites before chars
-        private static readonly string[] s_astrEscapedLineEndingStrings = new[] { "\\\r\\\n", "\\\n\\\r", "\\\n", "\\\r" };
+        private static readonly string[] s_astrEscapedLineEndingStrings = new[] { "\\r\\n", "\\n\\r", "\\n", "\\r" };
 
         private static readonly DebuggableSemaphoreSlim s_RtbRtfManipulatorLock = new DebuggableSemaphoreSlim();
         private static readonly Lazy<RichTextBox> s_RtbRtfManipulator = new Lazy<RichTextBox>(() => Utils.RunOnMainThread(() => new RichTextBox(), token: CancellationToken.None));

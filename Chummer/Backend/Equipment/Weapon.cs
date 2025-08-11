@@ -819,12 +819,14 @@ namespace Chummer.Backend.Equipment
                             continue;
                         XmlNode objXmlAccessory =
                             objXmlDocument.TryGetNodeByNameOrId("/chummer/accessories/accessory", strName);
+                        if (objXmlAccessory == null)
+                            continue;
                         WeaponAccessory objAccessory = new WeaponAccessory(_objCharacter);
                         int intAccessoryRating = 0;
                         if (objXmlWeaponAccessory["rating"] != null)
                         {
-                            intAccessoryRating = Convert.ToInt32(objXmlWeaponAccessory["rating"].InnerText,
-                                GlobalSettings.InvariantCultureInfo);
+                            int.TryParse(objXmlWeaponAccessory["rating"].InnerText, NumberStyles.Integer,
+                                GlobalSettings.InvariantCultureInfo, out intAccessoryRating);
                         }
 
                         if (blnSync)
@@ -3195,8 +3197,9 @@ namespace Chummer.Backend.Equipment
                 Gear objGear = objCurrentClip.AmmoGear;
                 if (objGear == null)
                     return;
-                if (objGear.Quantity > intCurrentAmmo - value)
-                    objGear.Quantity -= intCurrentAmmo - value;
+                decimal decNewQuantity = objGear.Quantity + value - intCurrentAmmo;
+                if (decNewQuantity > 0)
+                    objGear.Quantity = decNewQuantity;
                 else
                     objGear.DeleteGear();
             }
@@ -3221,9 +3224,9 @@ namespace Chummer.Backend.Equipment
                 return Task.CompletedTask;
             if (token.IsCancellationRequested)
                 return Task.FromCanceled(token);
-            int intDiff = intCurrentAmmo - value;
-            if (objGear.Quantity > intDiff)
-                return objGear.SetQuantityAsync(objGear.Quantity - intCurrentAmmo - value, token);
+            decimal decNewQuantity = objGear.Quantity - value - intCurrentAmmo;
+            if (decNewQuantity > 0)
+                return objGear.SetQuantityAsync(decNewQuantity, token);
             else
                 return objGear.DeleteGearAsync(token: token);
         }
@@ -4201,7 +4204,8 @@ namespace Chummer.Backend.Equipment
                 foreach (string strValue in strMin.TrimStartOnce("min(", true).TrimEndOnce(')')
                              .SplitNoAlloc(',', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    intMinValue = Math.Min(intMinValue, Convert.ToInt32(strValue, GlobalSettings.InvariantCultureInfo));
+                    if (int.TryParse(strValue, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out int intValue))
+                        intMinValue = Math.Min(intMinValue, intValue);
                 }
 
                 strDamage = strDamage.Replace(strMin, intMinValue.ToString(GlobalSettings.InvariantCultureInfo));
@@ -6576,8 +6580,8 @@ namespace Chummer.Backend.Equipment
             string strRCFull;
             string strRC = RC;
 
-            List<Tuple<string, int>> lstRCGroups = new List<Tuple<string, int>>(5);
-            List<Tuple<string, int>> lstRCDeployGroups = new List<Tuple<string, int>>(5);
+            List<Tuple<string, decimal>> lstRCGroups = new List<Tuple<string, decimal>>(5);
+            List<Tuple<string, decimal>> lstRCDeployGroups = new List<Tuple<string, decimal>>(5);
             strRC = blnSync
                 // ReSharper disable once MethodHasAsyncOverloadWithCancellation
                 ? strRC.CheapReplace("{Rating}", () => Rating.ToString(GlobalSettings.InvariantCultureInfo))
@@ -6659,8 +6663,10 @@ namespace Chummer.Backend.Equipment
                         continue;
                     if (blnRestrictRecoil && objAccessory.RCGroup != 0)
                     {
-                        int intItemRC = Convert.ToInt32(objAccessory.RC, GlobalSettings.InvariantCultureInfo);
-                        List<Tuple<string, int>> lstLoopRCGroup = lstRCGroups;
+                        decimal decItemRC = blnSync
+                            ? objAccessory.TotalRC
+                            : await objAccessory.GetTotalRCAsync(token).ConfigureAwait(false);
+                        List<Tuple<string, decimal>> lstLoopRCGroup = lstRCGroups;
                         if (objAccessory.RCDeployable)
                         {
                             lstLoopRCGroup = lstRCDeployGroups;
@@ -6668,18 +6674,18 @@ namespace Chummer.Backend.Equipment
 
                         while (lstLoopRCGroup.Count < objAccessory.RCGroup)
                         {
-                            lstLoopRCGroup.Add(new Tuple<string, int>(string.Empty, 0));
+                            lstLoopRCGroup.Add(new Tuple<string, decimal>(string.Empty, 0));
                         }
 
-                        if (lstLoopRCGroup[objAccessory.RCGroup - 1].Item2 < intItemRC)
+                        if (lstLoopRCGroup[objAccessory.RCGroup - 1].Item2 < decItemRC)
                         {
                             lstLoopRCGroup[objAccessory.RCGroup - 1]
-                                = new Tuple<string, int>(
+                                = new Tuple<string, decimal>(
                                     blnSync
                                         // ReSharper disable once MethodHasAsyncOverloadWithCancellation
                                         ? objAccessory.DisplayName(strLanguage)
                                         : await objAccessory.DisplayNameAsync(strLanguage, token).ConfigureAwait(false),
-                                    intItemRC);
+                                    decItemRC);
                         }
 
                         if (objAccessory.RCDeployable)
@@ -6842,10 +6848,11 @@ namespace Chummer.Backend.Equipment
                     }
                 }
 
-                foreach ((string strGroup, int intRecoil) in lstRCGroups)
+                foreach ((string strGroup, decimal decRecoil) in lstRCGroups)
                 {
                     if (!string.IsNullOrEmpty(strGroup))
                     {
+                        int intRecoil = decRecoil.StandardRound();
                         // Add in the Recoil Group bonuses.
                         intRCBase += intRecoil;
                         intRCFull += intRecoil;
@@ -6855,10 +6862,11 @@ namespace Chummer.Backend.Equipment
                     }
                 }
 
-                foreach ((string strGroup, int intRecoil) in lstRCDeployGroups)
+                foreach ((string strGroup, decimal decRecoil) in lstRCDeployGroups)
                 {
                     if (!string.IsNullOrEmpty(strGroup))
                     {
+                        int intRecoil = decRecoil.StandardRound();
                         // Add in the Recoil Group bonuses.
                         intRCFull += intRecoil;
                         if (blnWithTooltip)
@@ -10254,7 +10262,7 @@ namespace Chummer.Backend.Equipment
                     else if (HasWirelessSmartgun)
                     {
                         strWeaponBonusPool = WirelessWeaponBonus["smartlinkpool"]?.InnerText;
-                        if (!string.IsNullOrEmpty(strWeaponBonusPool.TrimStart('+')))
+                        if (!string.IsNullOrEmpty(strWeaponBonusPool))
                         {
                             sbdExtra.Append(strSpace).Append('+').Append(strSpace)
                                 .Append(await LanguageManager.GetStringAsync("String_Wireless", token: token).ConfigureAwait(false)).Append(strSpace).Append('(')

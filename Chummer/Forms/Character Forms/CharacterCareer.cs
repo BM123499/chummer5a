@@ -23,6 +23,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -5793,7 +5794,7 @@ namespace Chummer
                             == DialogResult.Cancel)
                             return;
 
-                        strSelectedVessel = frmSelectVessel.MyForm.SelectedItem;
+                        strSelectedVessel = await frmSelectVessel.MyForm.DoThreadSafeFuncAsync(x => x.SelectedItem, GenericToken).ConfigureAwait(false);
                     }
                 }
 
@@ -5959,9 +5960,7 @@ namespace Chummer
                                                 CritterPower objPower = new CritterPower(objMerge);
                                                 string strSelect = objXmlPower.Attributes?["select"]?.InnerText
                                                                     ?? string.Empty;
-                                                int intRating = Convert.ToInt32(
-                                                    objXmlPower.Attributes?["rating"]?.InnerText,
-                                                    GlobalSettings.InvariantCultureInfo);
+                                                int.TryParse(objXmlPower.Attributes?["rating"]?.InnerText, NumberStyles.Integer, GlobalSettings.InvariantCultureInfo, out int intRating);
 
                                                 await objPower.CreateAsync(objXmlCritterPower, intRating, strSelect, GenericToken).ConfigureAwait(false);
 
@@ -8315,7 +8314,7 @@ namespace Chummer
                         == DialogResult.Cancel)
                         return;
 
-                    objSelectedGear = await CharacterObject.Gear.DeepFindByIdAsync(frmPickItem.MyForm.SelectedItem, GenericToken).ConfigureAwait(false);
+                    objSelectedGear = await CharacterObject.Gear.DeepFindByIdAsync(await frmPickItem.MyForm.DoThreadSafeFuncAsync(x => x.SelectedItem, GenericToken).ConfigureAwait(false), GenericToken).ConfigureAwait(false);
                 }
 
                 decimal decMinimumAmount = 1.0m;
@@ -8398,7 +8397,7 @@ namespace Chummer
                         return;
 
                     // Locate the selected Vehicle.
-                    string strItem = frmPickItem.MyForm.SelectedItem;
+                    string strItem = await frmPickItem.MyForm.DoThreadSafeFuncAsync(x => x.SelectedItem, GenericToken).ConfigureAwait(false);
                     objVehicle = await CharacterObject.Vehicles
                                                       .FirstOrDefaultAsync(x => x.InternalId == strItem, GenericToken)
                                                       .ConfigureAwait(false);
@@ -9151,9 +9150,8 @@ namespace Chummer
                         if (await objSelectedQuality.GetTypeAsync(token).ConfigureAwait(false) == QualityType.Negative
                             || objXmlDeleteQuality?.SelectSingleNodeAndCacheExpression("refundkarmaonremove", token: token) != null)
                         {
-                            intBP = Convert.ToInt32(
-                                objXmlDeleteQuality?.SelectSingleNodeAndCacheExpression("karma", token: token)?.Value,
-                                GlobalSettings.InvariantCultureInfo) * await CharacterObjectSettings.GetKarmaQualityAsync(token).ConfigureAwait(false);
+                            int.TryParse(objXmlDeleteQuality?.SelectSingleNodeAndCacheExpression("karma", token: token)?.Value, NumberStyles.Integer, GlobalSettings.InvariantCultureInfo, out intBP);
+                            intBP *= await CharacterObjectSettings.GetKarmaQualityAsync(token).ConfigureAwait(false);
                             if (blnCompleteDelete)
                                 intBP *= await objSelectedQuality.GetLevelsAsync(token).ConfigureAwait(false);
                             if (!await CharacterObjectSettings.GetDontDoubleQualityPurchasesAsync(token).ConfigureAwait(false) && objSelectedQuality.DoubleCost)
@@ -10021,10 +10019,10 @@ namespace Chummer
                 using (ThreadSafeForm<SelectItem> frmPickItem = await ThreadSafeForm<SelectItem>.GetAsync(
                            () => new SelectItem
                            {
-                               Description = strDescription,
                                AllowAutoSelect = false
                            }, GenericToken).ConfigureAwait(false))
                 {
+                    await frmPickItem.MyForm.DoThreadSafeAsync(x => x.Description = strDescription, GenericToken).ConfigureAwait(false);
                     // Let the character select the Foci they'd like to stack, stopping when they either click Cancel or there are no more items left in the list.
                     DialogResult eResult;
                     do
@@ -10033,10 +10031,11 @@ namespace Chummer
                         eResult = await frmPickItem.ShowDialogSafeAsync(this, GenericToken).ConfigureAwait(false);
                         if (eResult != DialogResult.OK)
                             continue;
+                        string strSelected = await frmPickItem.MyForm.DoThreadSafeFuncAsync(x => x.SelectedItem, GenericToken).ConfigureAwait(false);
                         // Move the item from the Gear list to the Stack list.
                         foreach (Gear objGear in lstGear)
                         {
-                            if (objGear.InternalId != frmPickItem.MyForm.SelectedItem)
+                            if (objGear.InternalId != strSelected)
                                 continue;
                             objGear.Bonded = true;
                             lstStack.Add(objGear);
@@ -11078,10 +11077,8 @@ namespace Chummer
 
                             ArmorMod objMod = new ArmorMod(CharacterObject);
                             List<Weapon> lstWeapons = new List<Weapon>(1);
-                            int intRating
-                                = Convert.ToInt32(objXmlArmor["maxrating"]?.InnerText,
-                                      GlobalSettings.InvariantCultureInfo)
-                                  > 1
+                            int.TryParse(objXmlArmor["maxrating"]?.InnerText, NumberStyles.Integer, GlobalSettings.InvariantCultureInfo, out int intMaxRating);
+                            int intRating = intMaxRating > 1
                                     ? frmPickArmorMod.MyForm.SelectedRating
                                     : 0;
 
@@ -17170,7 +17167,7 @@ namespace Chummer
                         return;
 
                     // Locate the selected Vehicle.
-                    string strSelectedItem = frmPickItem.MyForm.SelectedItem;
+                    string strSelectedItem = await frmPickItem.MyForm.DoThreadSafeFuncAsync(x => x.SelectedItem, GenericToken).ConfigureAwait(false);
                     Vehicle objVehicle
                         = await CharacterObject.Vehicles.FirstOrDefaultAsync(
                             x => x.InternalId == strSelectedItem, GenericToken).ConfigureAwait(false);
@@ -17231,7 +17228,7 @@ namespace Chummer
                             == DialogResult.Cancel)
                             return;
 
-                        string strId = frmPickItem.MyForm.SelectedItem;
+                        string strId = await frmPickItem.MyForm.DoThreadSafeFuncAsync(x => x.SelectedItem, GenericToken).ConfigureAwait(false);
                         // Locate the selected Vehicle Mod.
                         objWeaponMount
                             = await objVehicle.WeaponMounts.FirstOrDefaultAsync(
@@ -22271,18 +22268,15 @@ namespace Chummer
                             }
                             else
                             {
+                                string strDamageText = (await objSelectedAccessory.GetTotalDamageAsync(token).ConfigureAwait(false)).ToString("+#,0.##;-#,0.##;0.##", GlobalSettings.CultureInfo);
                                 await lblWeaponDamageLabel
                                       .DoThreadSafeAsync(
-                                          x => x.Visible = !string.IsNullOrEmpty(objSelectedAccessory.Damage), token)
+                                          x => x.Visible = true, token)
                                       .ConfigureAwait(false);
                                 await lblWeaponDamage.DoThreadSafeAsync(x =>
                                 {
-                                    x.Visible = !string.IsNullOrEmpty(objSelectedAccessory
-                                                                          .Damage);
-                                    x.Text = Convert
-                                             .ToInt32(objSelectedAccessory.Damage,
-                                                      GlobalSettings.InvariantCultureInfo)
-                                             .ToString("+#,0;-#,0;0", GlobalSettings.CultureInfo);
+                                    x.Visible = true;
+                                    x.Text = strDamageText;
                                 }, token).ConfigureAwait(false);
                             }
 
@@ -22296,14 +22290,13 @@ namespace Chummer
                             }
                             else
                             {
+                                string strAPText = (await objSelectedAccessory.GetTotalAPAsync(token).ConfigureAwait(false)).ToString("+#,0.##;-#,0.##;0.##", GlobalSettings.CultureInfo);
                                 await lblWeaponAPLabel.DoThreadSafeAsync(x => x.Visible = true, token)
-                                                      .ConfigureAwait(false);
+                                                    .ConfigureAwait(false);
                                 await lblWeaponAP.DoThreadSafeAsync(x =>
                                 {
                                     x.Visible = true;
-                                    x.Text = Convert
-                                             .ToInt32(objSelectedAccessory.AP, GlobalSettings.InvariantCultureInfo)
-                                             .ToString("+#,0;-#,0;0", GlobalSettings.CultureInfo);
+                                    x.Text = strAPText;
                                 }, token).ConfigureAwait(false);
                             }
 
@@ -22363,14 +22356,13 @@ namespace Chummer
                             }
                             else
                             {
+                                string strRCText = (await objSelectedAccessory.GetTotalRCAsync(token).ConfigureAwait(false)).ToString("+#,0.##;-#,0.##;0.##", GlobalSettings.CultureInfo);
                                 await lblWeaponRCLabel.DoThreadSafeAsync(x => x.Visible = true, token)
-                                                      .ConfigureAwait(false);
+                                                    .ConfigureAwait(false);
                                 await lblWeaponRC.DoThreadSafeAsync(x =>
                                 {
                                     x.Visible = true;
-                                    x.Text = Convert
-                                             .ToInt32(objSelectedAccessory.RC, GlobalSettings.InvariantCultureInfo)
-                                             .ToString("+#,0;-#,0;0", GlobalSettings.CultureInfo);
+                                    x.Text = strRCText;
                                 }, token).ConfigureAwait(false);
                             }
 
@@ -24822,11 +24814,12 @@ namespace Chummer
                     }
 
                     //Controls Visibility and content of the City, District and Borough Labels
-                    if (!string.IsNullOrEmpty(objLifestyle.City))
+                    string strCity = await objLifestyle.GetCityAsync(token).ConfigureAwait(false);
+                    if (!string.IsNullOrEmpty(strCity))
                     {
                         await lblLifestyleCity.DoThreadSafeAsync(x =>
                         {
-                            x.Text = objLifestyle.City;
+                            x.Text = strCity;
                             x.Visible = true;
                         }, token).ConfigureAwait(false);
                         await lblLifestyleCityLabel.DoThreadSafeAsync(x => x.Visible = true, token)
@@ -24839,11 +24832,12 @@ namespace Chummer
                                                    .ConfigureAwait(false);
                     }
 
-                    if (!string.IsNullOrEmpty(objLifestyle.District))
+                    string strDistrict = await objLifestyle.GetDistrictAsync(token).ConfigureAwait(false);
+                    if (!string.IsNullOrEmpty(strDistrict))
                     {
                         await lblLifestyleDistrict.DoThreadSafeAsync(x =>
                         {
-                            x.Text = objLifestyle.District;
+                            x.Text = strDistrict;
                             x.Visible = true;
                         }, token).ConfigureAwait(false);
                         await lblLifestyleDistrictLabel.DoThreadSafeAsync(x => x.Visible = true, token)
@@ -24857,11 +24851,12 @@ namespace Chummer
                                                        .ConfigureAwait(false);
                     }
 
-                    if (!string.IsNullOrEmpty(objLifestyle.Borough))
+                    string strBorough = await objLifestyle.GetBoroughAsync(token).ConfigureAwait(false);
+                    if (!string.IsNullOrEmpty(strBorough))
                     {
                         await lblLifestyleBorough.DoThreadSafeAsync(x =>
                         {
-                            x.Text = objLifestyle.Borough;
+                            x.Text = strBorough;
                             x.Visible = true;
                         }, token).ConfigureAwait(false);
                         await lblLifestyleBoroughLabel.DoThreadSafeAsync(x => x.Visible = true, token)
@@ -25996,14 +25991,12 @@ namespace Chummer
                             }
                             else
                             {
+                                string strDamageText = (await objAccessory.GetTotalDamageAsync(token).ConfigureAwait(false)).ToString("+#,0.##;-#,0.##;0.##", GlobalSettings.CultureInfo);
                                 await lblVehicleWeaponDamageLabel.DoThreadSafeAsync(x => x.Visible = true, token)
-                                                                 .ConfigureAwait(false);
+                                                                .ConfigureAwait(false);
                                 await lblVehicleWeaponDamage.DoThreadSafeAsync(x =>
                                 {
-                                    x.Text = Convert
-                                             .ToInt32(objAccessory.Damage,
-                                                      GlobalSettings.InvariantCultureInfo)
-                                             .ToString("+#,0;-#,0;0", GlobalSettings.CultureInfo);
+                                    x.Text = strDamageText;
                                     x.Visible = true;
                                 }, token).ConfigureAwait(false);
                             }
@@ -26017,13 +26010,12 @@ namespace Chummer
                             }
                             else
                             {
+                                string strRCText = (await objAccessory.GetTotalRCAsync(token).ConfigureAwait(false)).ToString("+#,0.##;-#,0.##;0.##", GlobalSettings.CultureInfo);
                                 await lblVehicleWeaponRCLabel.DoThreadSafeAsync(x => x.Visible = true, token)
-                                                             .ConfigureAwait(false);
+                                                            .ConfigureAwait(false);
                                 await lblVehicleWeaponRC.DoThreadSafeAsync(x =>
                                 {
-                                    x.Text = Convert
-                                             .ToInt32(objAccessory.RC, GlobalSettings.InvariantCultureInfo)
-                                             .ToString("+#,0;-#,0;0", GlobalSettings.CultureInfo);
+                                    x.Text = strRCText;
                                     x.Visible = true;
                                 }, token).ConfigureAwait(false);
                             }
@@ -26056,13 +26048,12 @@ namespace Chummer
                             }
                             else
                             {
+                                string strAPText = (await objAccessory.GetTotalAPAsync(token).ConfigureAwait(false)).ToString("+#,0.##;-#,0.##;0.##", GlobalSettings.CultureInfo);
                                 await lblVehicleWeaponAPLabel.DoThreadSafeAsync(x => x.Visible = true, token)
-                                                             .ConfigureAwait(false);
+                                                            .ConfigureAwait(false);
                                 await lblVehicleWeaponAP.DoThreadSafeAsync(x =>
                                 {
-                                    x.Text = Convert
-                                             .ToInt32(objAccessory.AP, GlobalSettings.InvariantCultureInfo)
-                                             .ToString("+#,0;-#,0;0", GlobalSettings.CultureInfo);
+                                    x.Text = strAPText;
                                     x.Visible = true;
                                 }, token).ConfigureAwait(false);
                             }
@@ -27427,9 +27418,7 @@ namespace Chummer
                                 continue;
                             XmlNode objXmlChildCyberware
                                 = objXmlDocument.TryGetNodeByNameOrId("/chummer/" + strXPathPrefix, strChildName);
-                            int intChildRating
-                                = Convert.ToInt32(objXmlChild["rating"]?.InnerText,
-                                    GlobalSettings.InvariantCultureInfo);
+                            int.TryParse(objXmlChild["rating"]?.InnerText, NumberStyles.Integer, GlobalSettings.InvariantCultureInfo, out int intChildRating);
 
                             await (await objCyberware.GetChildrenAsync(token).ConfigureAwait(false)).AddAsync(await CreateSuiteCyberware(objXmlChild,
                                 objXmlChildCyberware, objGrade,
@@ -27516,9 +27505,7 @@ namespace Chummer
                                     continue;
                                 XmlNode objXmlCyberware = objXmlDocument.TryGetNodeByNameOrId(
                                     "/chummer/" + strType + "s/" + strType, strItemName);
-                                int intRating
-                                    = Convert.ToInt32(xmlItem["rating"]?.InnerText,
-                                        GlobalSettings.InvariantCultureInfo);
+                                int.TryParse(xmlItem["rating"]?.InnerText, NumberStyles.Integer, GlobalSettings.InvariantCultureInfo, out int intRating);
 
                                 Cyberware objCyberware
                                     = await CreateSuiteCyberware(xmlItem, objXmlCyberware, objGrade, intRating,
@@ -28850,11 +28837,9 @@ namespace Chummer
                             .GetStringAsync("MessageTitle_SelectCyberware", token: GenericToken)
                             .ConfigureAwait(false);
                         using (ThreadSafeForm<SelectItem> frmPickMount = await ThreadSafeForm<SelectItem>.GetAsync(
-                                   () => new SelectItem
-                                   {
-                                       Description = strDescription
-                                   }, GenericToken).ConfigureAwait(false))
+                                   () => new SelectItem(), GenericToken).ConfigureAwait(false))
                         {
+                            await frmPickMount.MyForm.DoThreadSafeAsync(x => x.Description = strDescription, GenericToken).ConfigureAwait(false);
                             frmPickMount.MyForm.SetGeneralItemsMode(lstModularMounts);
 
                             // Make sure the dialogue window was not canceled.
@@ -28864,7 +28849,7 @@ namespace Chummer
                                 return;
                             }
 
-                            strSelectedParentID = frmPickMount.MyForm.SelectedItem;
+                            strSelectedParentID = await frmPickMount.MyForm.DoThreadSafeFuncAsync(x => x.SelectedItem, GenericToken).ConfigureAwait(false);
                         }
                     }
 
@@ -28992,11 +28977,9 @@ namespace Chummer
                             .GetStringAsync("MessageTitle_SelectCyberware", token: GenericToken)
                             .ConfigureAwait(false);
                         using (ThreadSafeForm<SelectItem> frmPickMount = await ThreadSafeForm<SelectItem>.GetAsync(
-                                   () => new SelectItem
-                                   {
-                                       Description = strDescription
-                                   }, GenericToken).ConfigureAwait(false))
+                                   () => new SelectItem(), GenericToken).ConfigureAwait(false))
                         {
+                            await frmPickMount.MyForm.DoThreadSafeAsync(x => x.Description = strDescription, GenericToken).ConfigureAwait(false);
                             frmPickMount.MyForm.SetGeneralItemsMode(lstModularMounts);
 
                             // Make sure the dialogue window was not canceled.
@@ -29006,7 +28989,7 @@ namespace Chummer
                                 return;
                             }
 
-                            strSelectedParentID = frmPickMount.MyForm.SelectedItem;
+                            strSelectedParentID = await frmPickMount.MyForm.DoThreadSafeFuncAsync(x => x.SelectedItem, GenericToken).ConfigureAwait(false);
                         }
                     }
 
