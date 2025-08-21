@@ -571,7 +571,7 @@ namespace Chummer
                             string strMinRating = xmlCyberware.SelectSingleNodeAndCacheExpression("minrating", token)?.Value ?? string.Empty;
                             string strMaxRating = xmlRatingNode.Value;
                             // Not a simple integer, so we need to start mucking around with strings
-                            (decimal decValue, bool blnIsSuccess) = await ProcessInvariantXPathExpression(xmlCyberware, strMinRating, 1, int.MaxValue, token).ConfigureAwait(false);
+                            (decimal decValue, bool blnIsSuccess) = await ProcessInvariantXPathExpression(xmlCyberware, strMinRating, 1, 0, token).ConfigureAwait(false);
                             int intMinRating = blnIsSuccess ? decValue.StandardRound() : 1;
                             await nudRating.DoThreadSafeAsync(x => x.Minimum = intMinRating, token: token).ConfigureAwait(false);
                             (decValue, blnIsSuccess) = await ProcessInvariantXPathExpression(xmlCyberware, strMaxRating, intMinRating, intMinRating, token).ConfigureAwait(false);
@@ -1251,9 +1251,10 @@ namespace Chummer
                                 strEss = strEss.ProcessFixedValuesString(intRating);
                                 decESS = (await ProcessInvariantXPathExpression(objXmlCyberware, strEss, intMinRating, intRating, token).ConfigureAwait(false)).Item1;
                                 decESS *= decCharacterESSModifier;
-                                if (!await _objCharacter.Settings.GetDontRoundEssenceInternallyAsync(token).ConfigureAwait(false))
+                                CharacterSettings objSettings = await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false);
+                                if (!await objSettings.GetDontRoundEssenceInternallyAsync(token).ConfigureAwait(false))
                                 {
-                                    decESS = decimal.Round(decESS, await _objCharacter.Settings.GetEssenceDecimalsAsync(token).ConfigureAwait(false),
+                                    decESS = decimal.Round(decESS, await objSettings.GetEssenceDecimalsAsync(token).ConfigureAwait(false),
                                                             MidpointRounding.AwayFromZero);
                                 }
                             }
@@ -1419,7 +1420,7 @@ namespace Chummer
             using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdFilter))
             {
                 sbdFilter.Append('(')
-                         .Append(await _objCharacter.Settings.BookXPathAsync(token: token).ConfigureAwait(false))
+                         .Append(await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).BookXPathAsync(token: token).ConfigureAwait(false))
                          .Append(')');
                 using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool,
                                                               out StringBuilder sbdCategoryFilter))
@@ -1620,7 +1621,7 @@ namespace Chummer
                         // If our rating tag is a complex property, check to make sure our maximum rating is not less than our minimum rating
                         if (!string.IsNullOrEmpty(strMinRating) && !int.TryParse(strMinRating, out intMinRating))
                         {
-                            (decimal decValue, bool blnIsSuccess) = await ProcessInvariantXPathExpression(xmlCyberware, strMinRating, 1, int.MaxValue, token).ConfigureAwait(false);
+                            (decimal decValue, bool blnIsSuccess) = await ProcessInvariantXPathExpression(xmlCyberware, strMinRating, 1, 0, token).ConfigureAwait(false);
                             if (blnIsSuccess)
                                 intMinRating = decValue.StandardRound();
                             else
@@ -1889,6 +1890,7 @@ namespace Chummer
                 using (new FetchSafelyFromSafeObjectPool<List<ListItem>>(Utils.ListItemListPool, out List<ListItem> lstGrade))
                 {
                     bool blnSkipCheck = !string.IsNullOrEmpty(strForceGrade) && strForceGrade == _strNoneGradeId;
+                    HashSet<string> setBannedWareGrades = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetBannedWareGradesAsync(token).ConfigureAwait(false);
                     foreach (Grade objWareGrade in _lstGrades)
                     {
                         if (!blnSkipCheck && objWareGrade.SourceIDString == _strNoneGradeId)
@@ -1924,8 +1926,12 @@ namespace Chummer
 
                             if (blnHideBannedGrades &&
                                 !await _objCharacter.GetCreatedAsync(token).ConfigureAwait(false) &&
-                                !await _objCharacter.GetIgnoreRulesAsync(token).ConfigureAwait(false) &&
-                                objWareGrade.Name.ContainsAny(await _objCharacter.Settings.GetBannedWareGradesAsync(token).ConfigureAwait(false))) continue;
+                                !await _objCharacter.GetIgnoreRulesAsync(token).ConfigureAwait(false))
+                            {
+                                string strGradeName = objWareGrade.Name;
+                                if (setBannedWareGrades.Contains(strGradeName) || strGradeName.ContainsAny(setBannedWareGrades))
+                                    continue;
+                            }
                         }
 
                         if (!await (await objWareGrade.GetNodeXPathAsync(token: token).ConfigureAwait(false)).RequirementsMetAsync(_objCharacter, token: token).ConfigureAwait(false))
@@ -1933,13 +1939,18 @@ namespace Chummer
                             continue;
                         }
 
-                        if (blnHideBannedGrades && !await _objCharacter.GetCreatedAsync(token).ConfigureAwait(false) && !await _objCharacter.GetIgnoreRulesAsync(token).ConfigureAwait(false) && objWareGrade.Name.ContainsAny(_objCharacter.Settings.BannedWareGrades))
+                        string strGradeDisplayName = await objWareGrade.GetCurrentDisplayNameAsync(token).ConfigureAwait(false);
+                        if (blnHideBannedGrades && !await _objCharacter.GetCreatedAsync(token).ConfigureAwait(false) && !await _objCharacter.GetIgnoreRulesAsync(token).ConfigureAwait(false))
                         {
-                            lstGrade.Add(new ListItem(objWareGrade.SourceIDString, '*' + await objWareGrade.GetCurrentDisplayNameAsync(token).ConfigureAwait(false)));
+                            string strGradeName = objWareGrade.Name;
+                            if (setBannedWareGrades.Contains(strGradeName) || strGradeName.ContainsAny(setBannedWareGrades))
+                                lstGrade.Add(new ListItem(objWareGrade.SourceIDString, '*' + strGradeDisplayName));
+                            else
+                                lstGrade.Add(new ListItem(objWareGrade.SourceIDString, strGradeDisplayName));
                         }
                         else
                         {
-                            lstGrade.Add(new ListItem(objWareGrade.SourceIDString, await objWareGrade.GetCurrentDisplayNameAsync(token).ConfigureAwait(false)));
+                            lstGrade.Add(new ListItem(objWareGrade.SourceIDString, strGradeDisplayName));
                         }
                     }
 

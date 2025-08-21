@@ -356,10 +356,32 @@ namespace Chummer
         /// <param name="objNode">XmlNode to load.</param>
         public void Load(XmlNode objNode)
         {
+            Utils.SafelyRunSynchronously(() => LoadCoreAsync(true, objNode));
+        }
+
+        /// <summary>
+        /// Load the Spell from the XmlNode.
+        /// </summary>
+        /// <param name="objNode">XmlNode to load.</param>
+        public Task LoadAsync(XmlNode objNode, CancellationToken token = default)
+        {
+            return LoadCoreAsync(false, objNode, token);
+        }
+
+        public async Task LoadCoreAsync(bool blnSync, XmlNode objNode, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
             if (objNode == null)
                 return;
-            using (LockObject.EnterWriteLock())
+            IDisposable objLocker = null;
+            IAsyncDisposable objLockerAsync = null;
+            if (blnSync)
+                objLocker = LockObject.EnterWriteLock(token);
+            else
+                objLockerAsync = await LockObject.EnterWriteLockAsync(token).ConfigureAwait(false);
+            try
             {
+                token.ThrowIfCancellationRequested();
                 if (!objNode.TryGetField("guid", Guid.TryParse, out _guiID))
                 {
                     _guiID = Guid.NewGuid();
@@ -368,14 +390,24 @@ namespace Chummer
                 objNode.TryGetStringFieldQuickly("name", ref _strName);
                 _objCachedMyXmlNode = null;
                 _objCachedMyXPathNode = null;
-                Lazy<XPathNavigator> objMyNode = new Lazy<XPathNavigator>(() => this.GetNodeXPath());
+                Lazy<XPathNavigator> objMyNode = null;
+                Microsoft.VisualStudio.Threading.AsyncLazy<XPathNavigator> objMyNodeAsync = null;
+                if (blnSync)
+                    objMyNode = new Lazy<XPathNavigator>(() => this.GetNodeXPath());
+                else
+                    objMyNodeAsync = new Microsoft.VisualStudio.Threading.AsyncLazy<XPathNavigator>(() => this.GetNodeXPathAsync(token), Utils.JoinableTaskFactory);
                 if (!objNode.TryGetGuidFieldQuickly("sourceid", ref _guiSourceID))
                 {
-                    objMyNode.Value?.TryGetGuidFieldQuickly("id", ref _guiSourceID);
+                    (blnSync ? objMyNode.Value : await objMyNodeAsync.GetValueAsync(token).ConfigureAwait(false))?.TryGetGuidFieldQuickly("id", ref _guiSourceID);
                 }
 
                 if (objNode.TryGetStringFieldQuickly("descriptors", ref _strDescriptors))
-                    UpdateHashDescriptors();
+                {
+                    if (blnSync)
+                        UpdateHashDescriptors();
+                    else
+                        await UpdateHashDescriptorsAsync(token).ConfigureAwait(false);
+                }
                 objNode.TryGetStringFieldQuickly("category", ref _strCategory);
                 objNode.TryGetStringFieldQuickly("type", ref _strType);
                 objNode.TryGetStringFieldQuickly("range", ref _strRange);
@@ -394,7 +426,7 @@ namespace Chummer
                                                                                && _objCharacter.LastSavedVersion
                                                                                <= new ValueVersion(5, 197, 30))
                 {
-                    objMyNode.Value?.TryGetStringFieldQuickly("dv", ref _strDV);
+                    (blnSync ? objMyNode.Value : await objMyNodeAsync.GetValueAsync(token).ConfigureAwait(false))?.TryGetStringFieldQuickly("dv", ref _strDV);
                 }
 
                 objNode.TryGetBoolFieldQuickly("extended", ref _blnExtended);
@@ -424,6 +456,13 @@ namespace Chummer
                 string sNotesColor = ColorTranslator.ToHtml(ColorManager.HasNotesColor);
                 objNode.TryGetStringFieldQuickly("notesColor", ref sNotesColor);
                 _colNotes = ColorTranslator.FromHtml(sNotesColor);
+            }
+            finally
+            {
+                if (blnSync)
+                    objLocker.Dispose();
+                else
+                    await objLockerAsync.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -606,6 +645,20 @@ namespace Chummer
                         _objCachedMyXPathNode = null;
                     }
                 }
+            }
+        }
+
+        public async Task<string> GetNameAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _strName;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -2741,7 +2794,7 @@ namespace Chummer
             try
             {
                 token.ThrowIfCancellationRequested();
-                if ((blnForInitiationsTab ? Grade < 0 : Grade != 0) && !string.IsNullOrEmpty(Source) && !await _objCharacter.Settings.BookEnabledAsync(Source, token).ConfigureAwait(false))
+                if ((blnForInitiationsTab ? Grade < 0 : Grade != 0) && !string.IsNullOrEmpty(Source) && !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).BookEnabledAsync(Source, token).ConfigureAwait(false))
                     return null;
 
                 string strText = await GetCurrentDisplayNameAsync(token).ConfigureAwait(false);
@@ -2869,6 +2922,7 @@ namespace Chummer
 
         public bool Remove(bool blnConfirmDelete = true)
         {
+            bool blnReturn;
             using (LockObject.EnterUpgradeableReadLock())
             {
                 if (Grade < 0)
@@ -2880,19 +2934,20 @@ namespace Chummer
 
                 using (LockObject.EnterWriteLock())
                 {
-                    _objCharacter.Spells.Remove(this);
                     ImprovementManager.RemoveImprovements(_objCharacter, Improvement.ImprovementSource.Spell,
                         InternalId);
+                    blnReturn = _objCharacter.Spells.Remove(this);
                 }
             }
 
             Dispose();
-            return true;
+            return blnReturn;
         }
 
         public async Task<bool> RemoveAsync(bool blnConfirmDelete = true, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
+            bool blnReturn;
             IAsyncDisposable objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
             try
             {
@@ -2911,10 +2966,10 @@ namespace Chummer
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    await _objCharacter.Spells.RemoveAsync(this, token).ConfigureAwait(false);
                     await ImprovementManager
                         .RemoveImprovementsAsync(_objCharacter, Improvement.ImprovementSource.Spell, InternalId, token)
                         .ConfigureAwait(false);
+                    blnReturn = await (await _objCharacter.GetSpellsAsync(token).ConfigureAwait(false)).RemoveAsync(this, token).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -2927,7 +2982,7 @@ namespace Chummer
             }
 
             await DisposeAsync().ConfigureAwait(false);
-            return true;
+            return blnReturn;
         }
 
         public void SetSourceDetail(Control sourceControl)

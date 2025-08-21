@@ -224,8 +224,32 @@ namespace Chummer
         /// <param name="objNode">XmlNode to load.</param>
         public void Load(XmlNode objNode)
         {
-            using (LockObject.EnterWriteLock())
+            Utils.SafelyRunSynchronously(() => LoadCoreAsync(true, objNode));
+        }
+
+        /// <summary>
+        /// Load the Complex Form from the XmlNode.
+        /// </summary>
+        /// <param name="objNode">XmlNode to load.</param>
+        public Task LoadAsync(XmlNode objNode, CancellationToken token = default)
+        {
+            return LoadCoreAsync(false, objNode, token);
+        }
+
+        public async Task LoadCoreAsync(bool blnSync, XmlNode objNode, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            if (objNode == null)
+                return;
+            IDisposable objLocker = null;
+            IAsyncDisposable objLockerAsync = null;
+            if (blnSync)
+                objLocker = LockObject.EnterWriteLock(token);
+            else
+                objLockerAsync = await LockObject.EnterWriteLockAsync(token).ConfigureAwait(false);
+            try
             {
+                token.ThrowIfCancellationRequested();
                 if (!objNode.TryGetField("guid", Guid.TryParse, out _guiID))
                 {
                     _guiID = Guid.NewGuid();
@@ -235,7 +259,7 @@ namespace Chummer
                 _objCachedMyXPathNode = null;
                 if (!objNode.TryGetGuidFieldQuickly("sourceid", ref _guiSourceID))
                 {
-                    this.GetNodeXPath()?.TryGetGuidFieldQuickly("id", ref _guiSourceID);
+                    (blnSync ? this.GetNodeXPath(token) : await this.GetNodeXPathAsync(token).ConfigureAwait(false))?.TryGetGuidFieldQuickly("id", ref _guiSourceID);
                 }
 
                 objNode.TryGetStringFieldQuickly("useskill", ref _strUseSkill);
@@ -252,6 +276,13 @@ namespace Chummer
                 _colNotes = ColorTranslator.FromHtml(sNotesColor);
 
                 objNode.TryGetInt32FieldQuickly("grade", ref _intGrade);
+            }
+            finally
+            {
+                if (blnSync)
+                    objLocker.Dispose();
+                else
+                    await objLockerAsync.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -368,6 +399,20 @@ namespace Chummer
                         _objCachedMyXPathNode = null;
                     }
                 }
+            }
+        }
+
+        public async Task<string> GetNameAsync(CancellationToken token = default)
+        {
+            IAsyncDisposable objLocker = await LockObject.EnterReadLockAsync(token).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                return _strName;
+            }
+            finally
+            {
+                await objLocker.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -1470,7 +1515,7 @@ namespace Chummer
             try
             {
                 token.ThrowIfCancellationRequested();
-                if ((blnForInitiationsTab ? Grade < 0 : Grade != 0) && !string.IsNullOrEmpty(Source) && !await _objCharacter.Settings.BookEnabledAsync(Source, token).ConfigureAwait(false))
+                if ((blnForInitiationsTab ? Grade < 0 : Grade != 0) && !string.IsNullOrEmpty(Source) && !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).BookEnabledAsync(Source, token).ConfigureAwait(false))
                     return null;
 
                 TreeNode objNode = new TreeNode
@@ -1578,6 +1623,7 @@ namespace Chummer
 
         public bool Remove(bool blnConfirmDelete = true)
         {
+            bool blnReturn;
             using (LockObject.EnterUpgradeableReadLock())
             {
                 if (Grade < 0)
@@ -1589,17 +1635,18 @@ namespace Chummer
 
                 using (LockObject.EnterWriteLock())
                 {
-                    _objCharacter.ComplexForms.Remove(this);
                     ImprovementManager.RemoveImprovements(_objCharacter, Improvement.ImprovementSource.ComplexForm,
                         InternalId);
+                    blnReturn = _objCharacter.ComplexForms.Remove(this);
                 }
             }
             Dispose();
-            return true;
+            return blnReturn;
         }
 
         public async Task<bool> RemoveAsync(bool blnConfirmDelete = true, CancellationToken token = default)
         {
+            bool blnReturn;
             token.ThrowIfCancellationRequested();
             IAsyncDisposable objLocker = await LockObject.EnterUpgradeableReadLockAsync(token).ConfigureAwait(false);
             try
@@ -1619,10 +1666,10 @@ namespace Chummer
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    await _objCharacter.ComplexForms.RemoveAsync(this, token).ConfigureAwait(false);
                     await ImprovementManager
                         .RemoveImprovementsAsync(_objCharacter, Improvement.ImprovementSource.ComplexForm, InternalId, token)
                         .ConfigureAwait(false);
+                    blnReturn = await (await _objCharacter.GetComplexFormsAsync(token).ConfigureAwait(false)).RemoveAsync(this, token).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -1635,7 +1682,7 @@ namespace Chummer
             }
 
             await DisposeAsync().ConfigureAwait(false);
-            return true;
+            return blnReturn;
         }
 
         public void SetSourceDetail(Control sourceControl)

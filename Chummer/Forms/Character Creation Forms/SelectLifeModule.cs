@@ -86,7 +86,7 @@ namespace Chummer
             token.ThrowIfCancellationRequested();
             List<TreeNode> lstTreeNodes = new List<TreeNode>();
             bool blnLimitList = await chkLimitList.DoThreadSafeFuncAsync(x => x.Checked, token: token).ConfigureAwait(false);
-            AsyncLazy<string> strBookPath = new AsyncLazy<string>(() => _objCharacter.Settings.BookXPathAsync(token: token), Utils.JoinableTaskFactory);
+            AsyncLazy<string> strBookPath = new AsyncLazy<string>(async () => await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).BookXPathAsync(token: token).ConfigureAwait(false), Utils.JoinableTaskFactory);
             foreach (XPathNavigator xmlNode in lstXmlNodes)
             {
                 token.ThrowIfCancellationRequested();
@@ -171,11 +171,11 @@ namespace Chummer
             {
                 string strBP = xmlSelectedNodeInfo["karma"]?.InnerText
                                ?? await LanguageManager.GetStringAsync("String_Unknown").ConfigureAwait(false);
-                string strSource = (await SourceString.GetSourceStringAsync(xmlSelectedNodeInfo["source"]?.InnerText,
+                string strSource = await (await SourceString.GetSourceStringAsync(xmlSelectedNodeInfo["source"]?.InnerText,
                                                                             strPage: xmlSelectedNodeInfo["altpage"]?.InnerText
                                                                             ?? xmlSelectedNodeInfo["page"]?.InnerText,
                                                                             objSettings: await _objCharacter.GetSettingsAsync().ConfigureAwait(false)).ConfigureAwait(false))
-                                               .ToString();
+                                               .ToStringAsync().ConfigureAwait(false);
                 string strStage = xmlSelectedNodeInfo["stage"]?.InnerText
                                   ?? await LanguageManager.GetStringAsync("String_Unknown").ConfigureAwait(false);
                 await lblBP.DoThreadSafeAsync(x => x.Text = strBP).ConfigureAwait(false);
@@ -308,7 +308,7 @@ namespace Chummer
 
         private async Task<string> GetSelectString(CancellationToken token = default)
         {
-            string strReturn = "[(" + await _objCharacter.Settings.BookXPathAsync(token: token).ConfigureAwait(false);
+            string strReturn = "[(" + await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).BookXPathAsync(token: token).ConfigureAwait(false);
 
             //chummer/modules/module//name[contains(., "C")]/..["" = string.Empty]
             // /chummer/modules/module//name[contains(., "can")]/..[id]

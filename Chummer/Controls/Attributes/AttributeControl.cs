@@ -512,7 +512,9 @@ namespace Chummer.UI.Attributes
         {
             _tmrKarmaChangeTimer?.Dispose();
             _tmrBaseChangeTimer?.Dispose();
-            _objCharacter.AttributeSection.DeregisterAsyncPropertyChangedForActiveAttribute(AttributeName, OnAttributePropertyChanged);
+            Character objCharacter = _objCharacter; // for thread safety
+            if (objCharacter?.IsDisposed == false)
+                objCharacter.AttributeSection.DeregisterAsyncPropertyChangedForActiveAttribute(AttributeName, OnAttributePropertyChanged);
         }
 
         private async void cmdImproveATT_Click(object sender, EventArgs e)
@@ -781,7 +783,7 @@ namespace Chummer.UI.Attributes
                 if (intValue < intTotalMaximum || intTotalMaximum == 0)
                     return true;
 
-                if (await _objCharacter.AttributeSection.CanRaiseAttributeToMetatypeMax(objAttribute, token)
+                if (await (await _objCharacter.GetAttributeSectionAsync(token).ConfigureAwait(false)).CanRaiseAttributeToMetatypeMax(objAttribute, token)
                         .ConfigureAwait(false))
                     return true;
 
@@ -789,7 +791,7 @@ namespace Chummer.UI.Attributes
                     string.Format(GlobalSettings.CultureInfo,
                         await LanguageManager.GetStringAsync("Message_AttributeMaximum", token: token)
                             .ConfigureAwait(false),
-                        await _objCharacter.Settings.GetMaxNumberMaxAttributesCreateAsync(token).ConfigureAwait(false)),
+                        await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMaxNumberMaxAttributesCreateAsync(token).ConfigureAwait(false)),
                     await LanguageManager.GetStringAsync("MessageTitle_Attribute", token: token).ConfigureAwait(false),
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information, token: token).ConfigureAwait(false);

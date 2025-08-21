@@ -270,6 +270,21 @@ namespace Chummer
         /// <param name="objNode">XmlNode to load.</param>
         public void Load(XmlNode objNode)
         {
+            Utils.SafelyRunSynchronously(() => LoadCoreAsync(true, objNode));
+        }
+
+        /// <summary>
+        /// Load the Critter Power from the XmlNode.
+        /// </summary>
+        /// <param name="objNode">XmlNode to load.</param>
+        public Task LoadAsync(XmlNode objNode, CancellationToken token = default)
+        {
+            return LoadCoreAsync(false, objNode, token);
+        }
+
+        public async Task LoadCoreAsync(bool blnSync, XmlNode objNode, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
             if (objNode == null)
                 return;
             if (!objNode.TryGetField("guid", Guid.TryParse, out _guiID))
@@ -282,7 +297,7 @@ namespace Chummer
             _objCachedMyXPathNode = null;
             if (!objNode.TryGetGuidFieldQuickly("sourceid", ref _guiSourceID))
             {
-                this.GetNodeXPath()?.TryGetGuidFieldQuickly("id", ref _guiSourceID);
+                (blnSync ? this.GetNodeXPath(token) : await this.GetNodeXPathAsync(token).ConfigureAwait(false))?.TryGetGuidFieldQuickly("id", ref _guiSourceID);
             }
             objNode.TryGetStringFieldQuickly("extra", ref _strExtra);
             objNode.TryGetStringFieldQuickly("category", ref _strCategory);
@@ -952,7 +967,7 @@ namespace Chummer
         public async Task<TreeNode> CreateTreeNode(ContextMenuStrip cmsEnhancement, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            if (Grade < 0 && !string.IsNullOrEmpty(Source) && !await _objCharacter.Settings.BookEnabledAsync(Source, token).ConfigureAwait(false))
+            if (Grade < 0 && !string.IsNullOrEmpty(Source) && !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).BookEnabledAsync(Source, token).ConfigureAwait(false))
                 return null;
 
             TreeNode objNode = new TreeNode
@@ -1026,7 +1041,7 @@ namespace Chummer
                 .RemoveImprovementsAsync(_objCharacter, Improvement.ImprovementSource.CritterPower, InternalId, token)
                 .ConfigureAwait(false);
 
-            return await _objCharacter.CritterPowers.RemoveAsync(this, token).ConfigureAwait(false);
+            return await (await _objCharacter.GetCritterPowersAsync(token).ConfigureAwait(false)).RemoveAsync(this, token).ConfigureAwait(false);
         }
 
         public void SetSourceDetail(Control sourceControl)

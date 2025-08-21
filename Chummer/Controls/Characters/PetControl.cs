@@ -87,9 +87,7 @@ namespace Chummer
         {
             _tmrMetatypeChangeTimer.Dispose();
             foreach (Control objControl in Controls)
-            {
                 objControl.DataBindings.Clear();
-            }
         }
 
         private void cboMetatype_TextChanged(object sender, EventArgs e)
@@ -218,36 +216,27 @@ namespace Chummer
                 }
                 else
                 {
-                    bool blnUseRelative = false;
-
                     // Make sure the file still exists before attempting to load it.
-                    if (!File.Exists(await _objContact.GetFileNameAsync(_objMyToken).ConfigureAwait(false)))
+                    string strFileName = await _objContact.GetFileNameAsync(_objMyToken).ConfigureAwait(false);
+                    if (!File.Exists(strFileName))
                     {
-                        bool blnError = false;
                         // If the file doesn't exist, use the relative path if one is available.
-                        if (string.IsNullOrEmpty(_objContact.RelativeFileName))
-                            blnError = true;
-                        else if (!File.Exists(Path.GetFullPath(_objContact.RelativeFileName)))
-                            blnError = true;
-                        else
-                            blnUseRelative = true;
-
-                        if (blnError)
+                        string strRelativeFileName = await _objContact.GetRelativeFileNameAsync(_objMyToken).ConfigureAwait(false);
+                        if (string.IsNullOrEmpty(strRelativeFileName) || !File.Exists(Path.GetFullPath(strRelativeFileName)))
                         {
                             await Program.ShowScrollableMessageBoxAsync(
                                 string.Format(GlobalSettings.CultureInfo,
                                     await LanguageManager.GetStringAsync("Message_FileNotFound", token: _objMyToken)
-                                        .ConfigureAwait(false), await _objContact.GetFileNameAsync(_objMyToken).ConfigureAwait(false)),
+                                        .ConfigureAwait(false), strFileName),
                                 await LanguageManager.GetStringAsync("MessageTitle_FileNotFound", token: _objMyToken).ConfigureAwait(false),
                                 MessageBoxButtons.OK, MessageBoxIcon.Error, token: _objMyToken).ConfigureAwait(false);
                             return;
                         }
+                        else
+                            strFileName = Path.GetFullPath(strRelativeFileName);
                     }
 
-                    string strFile = blnUseRelative
-                        ? Path.GetFullPath(_objContact.RelativeFileName)
-                        : await _objContact.GetFileNameAsync(_objMyToken).ConfigureAwait(false);
-                    Process.Start(new ProcessStartInfo(strFile) { UseShellExecute = true });
+                    Process.Start(new ProcessStartInfo(strFileName) { UseShellExecute = true });
                 }
             }
             catch (OperationCanceledException)
@@ -415,9 +404,10 @@ namespace Chummer
                             string strMetavariantName
                                 = objXmlMetavariantNode.SelectSingleNodeAndCacheExpression("name", token: token)?.Value
                                   ?? string.Empty;
-                            if (lstMetatypes.TrueForAll(
-                                    x => strMetavariantName.Equals(x.Value.ToString(),
-                                                                   StringComparison.OrdinalIgnoreCase)))
+                            if (!string.IsNullOrEmpty(strMetavariantName) &&
+                                (lstMetatypes.Count == 0 || lstMetatypes.TrueForAll(
+                                    x => !strMetavariantName.Equals(x.Value?.ToString(),
+                                                                   StringComparison.OrdinalIgnoreCase))))
                                 lstMetatypes.Add(new ListItem(strMetavariantName,
                                                               string.Format(
                                                                   GlobalSettings.CultureInfo, strMetavariantFormat,

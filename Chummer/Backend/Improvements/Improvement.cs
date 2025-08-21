@@ -27,6 +27,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml;
 using Chummer.Backend.Attributes;
+using Chummer.Backend.Enums;
 using Chummer.Backend.Skills;
 using Chummer.Backend.Uniques;
 using NLog;
@@ -1928,14 +1929,16 @@ namespace Chummer
                     // Keeping two enumerations separate helps avoid extra heap allocations
                     foreach (Skill objTargetSkill in _objCharacter.SkillsSection.Skills)
                     {
-                        if (objTargetSkill.Attribute == ImprovedName || lstExtraImprovedName?.Contains(objTargetSkill.Attribute) == true)
+                        string strAttribute = objTargetSkill.Attribute;
+                        if (strAttribute == ImprovedName || lstExtraImprovedName?.Contains(strAttribute) == true)
                             yield return new Tuple<INotifyMultiplePropertiesChangedAsync, string>(objTargetSkill,
                                 nameof(Skill.PoolModifiers));
                     }
 
                     foreach (KnowledgeSkill objTargetSkill in _objCharacter.SkillsSection.KnowledgeSkills)
                     {
-                        if (objTargetSkill.Attribute == ImprovedName || lstExtraImprovedName?.Contains(objTargetSkill.Attribute) == true)
+                        string strAttribute = objTargetSkill.Attribute;
+                        if (strAttribute == ImprovedName || lstExtraImprovedName?.Contains(strAttribute) == true)
                             yield return new Tuple<INotifyMultiplePropertiesChangedAsync, string>(objTargetSkill,
                                 nameof(Skill.PoolModifiers));
                     }
@@ -2161,7 +2164,7 @@ namespace Chummer
                     foreach (CharacterAttrib objCharacterAttrib in _objCharacter.GetAllAttributes())
                     {
                         if ((objCharacterAttrib.Abbrev != ImprovedName && lstExtraImprovedName?.Contains(objCharacterAttrib.Abbrev) != true)
-                            || objCharacterAttrib.MetatypeCategory == CharacterAttrib.AttributeCategory.Shapeshifter)
+                            || objCharacterAttrib.MetatypeCategory == AttributeCategory.Shapeshifter)
                             continue;
                         if (Maximum != 0)
                             yield return new Tuple<INotifyMultiplePropertiesChangedAsync, string>(objCharacterAttrib,
@@ -4441,19 +4444,22 @@ namespace Chummer
 
                 case ImprovementType.SkillLinkedAttribute:
                     {
+                        SkillsSection objSkillsSection = await _objCharacter.GetSkillsSectionAsync(token).ConfigureAwait(false);
                         // Keeping two enumerations separate helps avoid extra heap allocations
-                        await _objCharacter.SkillsSection.Skills.ForEachAsync(objTargetSkill =>
+                        await (await objSkillsSection.GetSkillsAsync(token).ConfigureAwait(false)).ForEachAsync(async objTargetSkill =>
                         {
-                            if (objTargetSkill.Attribute == ImprovedName ||
-                                lstExtraImprovedName?.Contains(objTargetSkill.Attribute) == true)
+                            string strAttribute = await objTargetSkill.GetAttributeAsync(token).ConfigureAwait(false);
+                            if (strAttribute == ImprovedName ||
+                                lstExtraImprovedName?.Contains(strAttribute) == true)
                                 lstReturn.Add(new Tuple<INotifyMultiplePropertiesChangedAsync, string>(objTargetSkill,
                                     nameof(Skill.PoolModifiers)));
                         }, token).ConfigureAwait(false);
 
-                        await _objCharacter.SkillsSection.KnowledgeSkills.ForEachAsync(objTargetSkill =>
+                        await (await objSkillsSection.GetKnowledgeSkillsAsync(token).ConfigureAwait(false)).ForEachAsync(async objTargetSkill =>
                         {
-                            if (objTargetSkill.Attribute == ImprovedName ||
-                                lstExtraImprovedName?.Contains(objTargetSkill.Attribute) == true)
+                            string strAttribute = await objTargetSkill.GetAttributeAsync(token).ConfigureAwait(false);
+                            if (strAttribute == ImprovedName ||
+                                lstExtraImprovedName?.Contains(strAttribute) == true)
                                 lstReturn.Add(new Tuple<INotifyMultiplePropertiesChangedAsync, string>(objTargetSkill,
                                     nameof(Skill.PoolModifiers)));
                         }, token).ConfigureAwait(false);
@@ -4700,7 +4706,7 @@ namespace Chummer
                         foreach (CharacterAttrib objCharacterAttrib in await _objCharacter.GetAllAttributesAsync(token).ConfigureAwait(false))
                         {
                             if ((objCharacterAttrib.Abbrev != ImprovedName && lstExtraImprovedName?.Contains(objCharacterAttrib.Abbrev) != true)
-                                || objCharacterAttrib.MetatypeCategory == CharacterAttrib.AttributeCategory.Shapeshifter)
+                                || objCharacterAttrib.MetatypeCategory == AttributeCategory.Shapeshifter)
                                 continue;
                             if (Maximum != 0)
                                 lstReturn.Add(new Tuple<INotifyMultiplePropertiesChangedAsync, string>(objCharacterAttrib,

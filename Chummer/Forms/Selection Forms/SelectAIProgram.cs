@@ -68,12 +68,14 @@ namespace Chummer
             foreach (XPathNavigator objXmlCategory in _xmlBaseChummerNode.SelectAndCacheExpression("categories/category"))
             {
                 string strInnerText = objXmlCategory.Value;
+                if (string.IsNullOrEmpty(strInnerText))
+                    continue;
                 if (_blnInherentProgram && strInnerText != "Common Programs" && strInnerText != "Hacking Programs")
                     continue;
                 if (!_blnAdvancedProgramAllowed && strInnerText == "Advanced Programs")
                     continue;
                 // Make sure it is not already in the Category list.
-                if (_lstCategory.TrueForAll(objItem => objItem.Value.ToString() != strInnerText))
+                if (_lstCategory.Count == 0 || _lstCategory.TrueForAll(objItem => objItem.Value?.ToString() != strInnerText))
                 {
                     _lstCategory.Add(new ListItem(strInnerText, objXmlCategory.SelectSingleNodeAndCacheExpression("@translate")?.Value ?? strInnerText));
                 }
@@ -285,7 +287,7 @@ namespace Chummer
 
             using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdFilter))
             {
-                sbdFilter.Append('(').Append(await _objCharacter.Settings.BookXPathAsync(token: token).ConfigureAwait(false)).Append(')');
+                sbdFilter.Append('(').Append(await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).BookXPathAsync(token: token).ConfigureAwait(false)).Append(')');
                 string strCategory = await cboCategory.DoThreadSafeFuncAsync(x => x.SelectedValue?.ToString(), token: token).ConfigureAwait(false);
                 if (!string.IsNullOrEmpty(strCategory) && strCategory != "Show All"
                                                        && (GlobalSettings.SearchInCategoryOnly

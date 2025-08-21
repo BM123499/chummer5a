@@ -29,6 +29,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using Chummer.Annotations;
+using Chummer.Backend.Enums;
 using Chummer.Backend.Equipment;
 
 namespace Chummer.Backend.Attributes
@@ -49,6 +50,7 @@ namespace Chummer.Backend.Attributes
         private string _strAbbrev;
         private readonly Character _objCharacter;
         private AttributeCategory _eMetatypeCategory;
+        private int _intIsDisposed;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -120,30 +122,57 @@ namespace Chummer.Backend.Attributes
         }
 
         /// <summary>
-        /// Load the CharacterAttribute from the XmlNode.
+        /// Load the Character Attribute from the XmlNode.
         /// </summary>
         /// <param name="objNode">XmlNode to load.</param>
         public void Load(XmlNode objNode)
         {
-            using (LockObject.EnterWriteLock())
+            Utils.SafelyRunSynchronously(() => LoadCoreAsync(true, objNode));
+        }
+
+        /// <summary>
+        /// Load the Character Attribute from the XmlNode.
+        /// </summary>
+        /// <param name="objNode">XmlNode to load.</param>
+        public Task LoadAsync(XmlNode objNode, CancellationToken token = default)
+        {
+            return LoadCoreAsync(false, objNode, token);
+        }
+
+        private async Task LoadCoreAsync(bool blnSync, XmlNode objNode, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            if (objNode == null)
+                return;
+            IDisposable objLocker = null;
+            IAsyncDisposable objLockerAsync = null;
+            if (blnSync)
+                objLocker = LockObject.EnterWriteLock(token);
+            else
+                objLockerAsync = await LockObject.EnterWriteLockAsync(token).ConfigureAwait(false);
+            try
             {
+                token.ThrowIfCancellationRequested();
                 objNode.TryGetStringFieldQuickly("name", ref _strAbbrev);
                 objNode.TryGetInt32FieldQuickly("metatypemin", ref _intMetatypeMin);
                 objNode.TryGetInt32FieldQuickly("metatypemax", ref _intMetatypeMax);
                 objNode.TryGetInt32FieldQuickly("metatypeaugmax", ref _intMetatypeAugMax);
                 objNode.TryGetInt32FieldQuickly("base", ref _intBase);
                 objNode.TryGetInt32FieldQuickly("karma", ref _intKarma);
-                if (!BaseUnlocked && !_objCharacter.Created)
+                if (blnSync)
                 {
-                    _intBase = 0;
+                    if (!BaseUnlocked && !_objCharacter.Created)
+                        _intBase = 0;
                 }
+                else if (!await GetBaseUnlockedAsync(token).ConfigureAwait(false) && !await _objCharacter.GetCreatedAsync(token).ConfigureAwait(false))
+                    _intBase = 0;
 
                 //Converts old attributes to split metatype minimum and base. Saves recalculating Base - TotalMinimum all the time.
                 int i = 0;
                 if (objNode.TryGetInt32FieldQuickly("value", ref i))
                 {
                     i -= _intMetatypeMin;
-                    if (BaseUnlocked)
+                    if (blnSync ? BaseUnlocked : await GetBaseUnlockedAsync(token).ConfigureAwait(false))
                     {
                         _intBase = Math.Max(_intBase - _intMetatypeMin, 0);
                         i -= _intBase;
@@ -175,6 +204,13 @@ namespace Chummer.Backend.Attributes
                     _eMetatypeCategory =
                         ConvertToMetatypeAttributeCategory(objNode["metatypecategory"]?.InnerText ?? "Standard");
                 }
+            }
+            finally
+            {
+                if (blnSync)
+                    objLocker.Dispose();
+                else
+                    await objLockerAsync.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -266,16 +302,6 @@ namespace Chummer.Backend.Attributes
         }
 
         #endregion Constructor, Save, Load, and Print Methods
-
-        /// <summary>
-        /// Type of Attribute.
-        /// </summary>
-        public enum AttributeCategory
-        {
-            Standard = 0,
-            Special,
-            Shapeshifter
-        }
 
         #region Properties
 
@@ -1852,7 +1878,7 @@ namespace Chummer.Backend.Attributes
             get
             {
                 using (LockObject.EnterReadLock())
-                    return CharacterObject.Settings.UnclampAttributeMinimum
+                    return _objCharacter.Settings.UnclampAttributeMinimum
                         ? MetatypeMinimum + MinimumModifiers
                         : Math.Max(MetatypeMinimum + MinimumModifiers, 0);
             }
@@ -1869,7 +1895,7 @@ namespace Chummer.Backend.Attributes
                 token.ThrowIfCancellationRequested();
                 int intReturn = await GetMetatypeMinimumAsync(token).ConfigureAwait(false) +
                                 await GetMinimumModifiersAsync(token).ConfigureAwait(false);
-                if (!CharacterObject.Settings.UnclampAttributeMinimum && intReturn < 0)
+                if (!(await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).UnclampAttributeMinimum && intReturn < 0)
                     intReturn = 0;
                 return intReturn;
             }
@@ -2834,7 +2860,7 @@ namespace Chummer.Backend.Attributes
                         }
 
                         //// If this is AGI or STR, factor in any Cyberlimbs.
-                        if (!await _objCharacter.Settings.GetDontUseCyberlimbCalculationAsync(token).ConfigureAwait(false) &&
+                        if (!await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetDontUseCyberlimbCalculationAsync(token).ConfigureAwait(false) &&
                             Cyberware.CyberlimbAttributeAbbrevs.Contains(Abbrev))
                         {
                             await _objCharacter.Cyberware.ForEachAsync(objCyberware => BuildTooltip(sbdModifier, objCyberware, strSpace), token: token).ConfigureAwait(false);
@@ -3156,8 +3182,9 @@ namespace Chummer.Backend.Attributes
                     return -1;
                 }
 
+                CharacterSettings objSettings = await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false);
                 int intUpgradeCost;
-                int intOptionsCost = await _objCharacter.Settings.GetKarmaAttributeAsync(token).ConfigureAwait(false);
+                int intOptionsCost = await objSettings.GetKarmaAttributeAsync(token).ConfigureAwait(false);
                 if (intValue == 0)
                 {
                     intUpgradeCost = intOptionsCost;
@@ -3167,7 +3194,7 @@ namespace Chummer.Backend.Attributes
                     intUpgradeCost = (intValue + 1) * intOptionsCost;
                 }
 
-                if (await _objCharacter.Settings.GetAlternateMetatypeAttributeKarmaAsync(token).ConfigureAwait(false)
+                if (await objSettings.GetAlternateMetatypeAttributeKarmaAsync(token).ConfigureAwait(false)
                     && !s_SetAlternateMetatypeAttributeKarmaExceptions.Contains(Abbrev))
                     intUpgradeCost -= (await GetMetatypeMinimumAsync(token).ConfigureAwait(false) - 1) *
                                       intOptionsCost;
@@ -4115,29 +4142,42 @@ namespace Chummer.Backend.Attributes
 
         #endregion static
 
+        public bool IsDisposed => _intIsDisposed > 0;
+
         /// <inheritdoc />
         public void Dispose()
         {
+            if (IsDisposed)
+                return;
             using (LockObject.EnterWriteLock())
             {
+                if (Interlocked.CompareExchange(ref _intIsDisposed, 1, 0) != 0)
+                    return;
                 if (_objCharacter != null)
                 {
-                    try
+                    if (!_objCharacter.IsDisposed)
                     {
-                        _objCharacter.MultiplePropertiesChangedAsync -= OnCharacterChanged;
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        //swallow this
+                        try
+                        {
+                            _objCharacter.MultiplePropertiesChangedAsync -= OnCharacterChanged;
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            //swallow this
+                        }
                     }
 
-                    try
+                    CharacterSettings objSettings = _objCharacter.Settings;
+                    if (objSettings?.IsDisposed == false)
                     {
-                        _objCharacter.Settings.MultiplePropertiesChangedAsync -= OnCharacterSettingsPropertyChanged;
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        //swallow this
+                        try
+                        {
+                            objSettings.MultiplePropertiesChangedAsync -= OnCharacterSettingsPropertyChanged;
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // swallow this
+                        }
                     }
                 }
                 _objCachedTotalValueLock.Dispose();
@@ -4147,27 +4187,38 @@ namespace Chummer.Backend.Attributes
         /// <inheritdoc />
         public async ValueTask DisposeAsync()
         {
+            if (IsDisposed)
+                return;
             IAsyncDisposable objLocker = await LockObject.EnterWriteLockAsync().ConfigureAwait(false);
             try
             {
+                if (Interlocked.CompareExchange(ref _intIsDisposed, 1, 0) != 0)
+                    return;
                 if (_objCharacter != null)
                 {
-                    try
+                    if (!_objCharacter.IsDisposed)
                     {
-                        _objCharacter.MultiplePropertiesChangedAsync -= OnCharacterChanged;
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        //swallow this
+                        try
+                        {
+                            _objCharacter.MultiplePropertiesChangedAsync -= OnCharacterChanged;
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            //swallow this
+                        }
                     }
 
-                    try
+                    CharacterSettings objSettings = await _objCharacter.GetSettingsAsync().ConfigureAwait(false);
+                    if (objSettings?.IsDisposed == false)
                     {
-                        _objCharacter.Settings.MultiplePropertiesChangedAsync -= OnCharacterSettingsPropertyChanged;
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        //swallow this
+                        try
+                        {
+                            objSettings.MultiplePropertiesChangedAsync -= OnCharacterSettingsPropertyChanged;
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // swallow this
+                        }
                     }
                 }
 

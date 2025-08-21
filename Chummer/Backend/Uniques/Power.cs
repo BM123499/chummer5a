@@ -82,10 +82,18 @@ namespace Chummer
             _objCachedPowerPointsLock = new AsyncFriendlyReaderWriterLock(LockObject, true);
             _objCachedTotalRatingLock = new AsyncFriendlyReaderWriterLock(LockObject, true);
             objCharacter.PropertyChangedAsync += OnCharacterChanged;
-            objCharacter.Settings.MultiplePropertiesChangedAsync += OnCharacterSettingsChanged;
-            MAGAttributeObject = objCharacter.Settings.MysAdeptSecondMAGAttribute && objCharacter.IsMysticAdept
-                ? objCharacter.MAGAdept
-                : objCharacter.MAG;
+            CharacterSettings objSettings = objCharacter.Settings;
+            if (objSettings?.IsDisposed == false)
+            {
+                objSettings.MultiplePropertiesChangedAsync += OnCharacterSettingsChanged;
+                MAGAttributeObject = objSettings.MysAdeptSecondMAGAttribute && objCharacter.IsMysticAdept
+                    ? objCharacter.MAGAdept
+                    : objCharacter.MAG;
+            }
+            else
+            {
+                MAGAttributeObject = objCharacter.MAG;
+            }
         }
 
         public void DeletePower()
@@ -222,9 +230,11 @@ namespace Chummer
                         {
                             foreach (XmlNode nodEnhancement in xmlEnhancementList)
                             {
-                                Enhancement objEnhancement = new Enhancement(CharacterObject);
+                                Enhancement objEnhancement = new Enhancement(CharacterObject)
+                                {
+                                    Parent = this
+                                };
                                 objEnhancement.Load(nodEnhancement);
-                                objEnhancement.Parent = this;
                                 Enhancements.Add(objEnhancement);
                             }
                         }
@@ -320,9 +330,11 @@ namespace Chummer
                         {
                             foreach (XmlNode nodEnhancement in xmlEnhancementList)
                             {
-                                Enhancement objEnhancement = new Enhancement(CharacterObject);
-                                objEnhancement.Load(nodEnhancement);
-                                objEnhancement.Parent = this;
+                                Enhancement objEnhancement = new Enhancement(CharacterObject)
+                                {
+                                    Parent = this
+                                };
+                                await objEnhancement.LoadAsync(nodEnhancement, token).ConfigureAwait(false);
                                 await Enhancements.AddAsync(objEnhancement, token).ConfigureAwait(false);
                             }
                         }
@@ -579,14 +591,21 @@ namespace Chummer
                     {
                         foreach (XmlNode nodEnhancement in nodEnhancements)
                         {
-                            Enhancement objEnhancement = new Enhancement(CharacterObject);
-                            objEnhancement.Load(nodEnhancement);
-                            objEnhancement.Parent = this;
+                            Enhancement objEnhancement = new Enhancement(CharacterObject)
+                            {
+                                Parent = this
+                            };
                             if (blnSync)
+                            {
+                                objEnhancement.Load(nodEnhancement);
                                 // ReSharper disable once MethodHasAsyncOverloadWithCancellation
                                 Enhancements.Add(objEnhancement);
+                            }
                             else
+                            {
+                                await objEnhancement.LoadAsync(nodEnhancement, token).ConfigureAwait(false);
                                 await Enhancements.AddAsync(objEnhancement, token).ConfigureAwait(false);
+                            }
                         }
                     }
                 }
@@ -3583,7 +3602,7 @@ namespace Chummer
             if (e.PropertyName == nameof(Character.IsMysticAdept))
             {
                 await SetMAGAttributeObjectAsync(
-                    await CharacterObject.Settings.GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false)
+                    await (await CharacterObject.GetSettingsAsync(token).ConfigureAwait(false)).GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false)
                     && await CharacterObject.GetIsMysticAdeptAsync(token).ConfigureAwait(false)
                         ? await CharacterObject.GetAttributeAsync("MAGAdept", token: token).ConfigureAwait(false)
                         : await CharacterObject.GetAttributeAsync("MAG", token: token).ConfigureAwait(false), token).ConfigureAwait(false);
@@ -3597,7 +3616,7 @@ namespace Chummer
                 || e.PropertyNames.Contains(nameof(CharacterSettings.IncreasedImprovedAbilityMultiplier)))
             {
                 await SetMAGAttributeObjectAsync(
-                        await CharacterObject.Settings.GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false)
+                        await (await CharacterObject.GetSettingsAsync(token).ConfigureAwait(false)).GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false)
                         && await CharacterObject.GetIsMysticAdeptAsync(token).ConfigureAwait(false)
                             ? await CharacterObject.GetAttributeAsync("MAGAdept", token: token).ConfigureAwait(false)
                             : await CharacterObject.GetAttributeAsync("MAG", token: token).ConfigureAwait(false), token)
@@ -3725,10 +3744,32 @@ namespace Chummer
         {
             using (LockObject.EnterWriteLock())
             {
-                if (CharacterObject != null)
+                Character objCharacter = CharacterObject;
+                if (objCharacter != null)
                 {
-                    CharacterObject.PropertyChangedAsync -= OnCharacterChanged;
-                    CharacterObject.Settings.MultiplePropertiesChangedAsync -= OnCharacterSettingsChanged;
+                    if (!objCharacter.IsDisposed)
+                    {
+                        try
+                        {
+                            objCharacter.PropertyChangedAsync -= OnCharacterChanged;
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // swallow this
+                        }
+                    }
+                    CharacterSettings objSettings = objCharacter.Settings;
+                    if (objSettings?.IsDisposed == false)
+                    {
+                        try
+                        {
+                            objSettings.MultiplePropertiesChangedAsync -= OnCharacterSettingsChanged;
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // swallow this
+                        }
+                    }
                 }
 
                 MAGAttributeObject = null;
@@ -3746,10 +3787,32 @@ namespace Chummer
             IAsyncDisposable objLocker = await LockObject.EnterWriteLockAsync().ConfigureAwait(false);
             try
             {
-                if (CharacterObject != null)
+                Character objCharacter = CharacterObject;
+                if (objCharacter != null)
                 {
-                    CharacterObject.PropertyChangedAsync -= OnCharacterChanged;
-                    CharacterObject.Settings.MultiplePropertiesChangedAsync -= OnCharacterSettingsChanged;
+                    if (!objCharacter.IsDisposed)
+                    {
+                        try
+                        {
+                            objCharacter.PropertyChangedAsync -= OnCharacterChanged;
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // swallow this
+                        }
+                    }
+                    CharacterSettings objSettings = await objCharacter.GetSettingsAsync().ConfigureAwait(false);
+                    if (objSettings?.IsDisposed == false)
+                    {
+                        try
+                        {
+                            objSettings.MultiplePropertiesChangedAsync -= OnCharacterSettingsChanged;
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // swallow this
+                        }
+                    }
                 }
 
                 await SetMAGAttributeObjectAsync(null).ConfigureAwait(false);

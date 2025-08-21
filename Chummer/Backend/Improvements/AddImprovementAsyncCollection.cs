@@ -915,7 +915,7 @@ namespace Chummer
                             lstAbbrevs.Remove("MAG");
                             lstAbbrevs.Remove("MAGAdept");
                         }
-                        else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await _objCharacter.Settings.GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
+                        else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
                             lstAbbrevs.Remove("MAGAdept");
 
                         if (!await _objCharacter.GetRESEnabledAsync(token).ConfigureAwait(false))
@@ -1076,7 +1076,7 @@ namespace Chummer
                 lstAbbrevs.Remove("MAG");
                 lstAbbrevs.Remove("MAGAdept");
             }
-            else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await _objCharacter.Settings.GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
+            else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
                 lstAbbrevs.Remove("MAGAdept");
 
             if (!await _objCharacter.GetRESEnabledAsync(token).ConfigureAwait(false))
@@ -1315,7 +1315,7 @@ namespace Chummer
                 lstAbbrevs.Remove("MAG");
                 lstAbbrevs.Remove("MAGAdept");
             }
-            else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await _objCharacter.Settings.GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
+            else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
                 lstAbbrevs.Remove("MAGAdept");
 
             if (!await _objCharacter.GetRESEnabledAsync(token).ConfigureAwait(false))
@@ -1453,7 +1453,7 @@ namespace Chummer
                 lstAbbrevs.Remove("MAG");
                 lstAbbrevs.Remove("MAGAdept");
             }
-            else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await _objCharacter.Settings.GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
+            else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
                 lstAbbrevs.Remove("MAGAdept");
 
             if (!await _objCharacter.GetRESEnabledAsync(token).ConfigureAwait(false))
@@ -2257,7 +2257,7 @@ namespace Chummer
                     lstAbbrevs.Remove("MAG");
                     lstAbbrevs.Remove("MAGAdept");
                 }
-                else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await _objCharacter.Settings.GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
+                else if (!await _objCharacter.GetIsMysticAdeptAsync(token).ConfigureAwait(false) || !await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetMysAdeptSecondMAGAttributeAsync(token).ConfigureAwait(false))
                     lstAbbrevs.Remove("MAGAdept");
 
                 if (!await _objCharacter.GetRESEnabledAsync(token).ConfigureAwait(false))
@@ -5775,7 +5775,7 @@ namespace Chummer
                         foreach (XmlNode objNode in objXmlList)
                         {
                             string strText = objNode.InnerText;
-                            if ((await ImprovementManager
+                            if (!string.IsNullOrEmpty(strText) && (await ImprovementManager
                                     .GetCachedImprovementListForValueOfAsync(_objCharacter,
                                         Improvement.ImprovementType.DealerConnection, token: token).ConfigureAwait(false))
                                 .TrueForAll(x => x.UniqueName != strText))
