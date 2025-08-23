@@ -422,11 +422,11 @@ namespace Chummer.Backend.Equipment
                     decimal decMax = decimal.MaxValue;
                     if (intHyphenIndex != -1)
                     {
-                        decMin = Convert.ToDecimal(strFirstHalf, GlobalSettings.InvariantCultureInfo);
-                        decMax = Convert.ToDecimal(strSecondHalf, GlobalSettings.InvariantCultureInfo);
+                        decimal.TryParse(strFirstHalf, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decMin);
+                        decimal.TryParse(strSecondHalf, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decMax);
                     }
                     else
-                        decMin = Convert.ToDecimal(strFirstHalf.FastEscape('+'), GlobalSettings.InvariantCultureInfo);
+                        decimal.TryParse(strFirstHalf.FastEscape('+'), NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decMin);
 
                     if (decMin != decimal.MinValue || decMax != decimal.MaxValue)
                     {
@@ -1719,7 +1719,7 @@ namespace Chummer.Backend.Equipment
         {
             string strArmorCapacity = ArmorCapacity;
             if (string.IsNullOrEmpty(strArmorCapacity))
-                return 0.0m.ToString("#,0.##", GlobalSettings.CultureInfo);
+                return 0.0m.ToString("#,0.##", objCultureInfo);
             strArmorCapacity = strArmorCapacity.ProcessFixedValuesString(() => Rating);
 
             if (strArmorCapacity.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
@@ -1749,7 +1749,7 @@ namespace Chummer.Backend.Equipment
             token.ThrowIfCancellationRequested();
             string strArmorCapacity = ArmorCapacity;
             if (string.IsNullOrEmpty(strArmorCapacity))
-                return 0.0m.ToString("#,0.##", GlobalSettings.CultureInfo);
+                return 0.0m.ToString("#,0.##", objCultureInfo);
             strArmorCapacity = await strArmorCapacity.ProcessFixedValuesStringAsync(() => GetRatingAsync(token), token).ConfigureAwait(false);
             if (strArmorCapacity.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decValue))
             {
@@ -1813,24 +1813,24 @@ namespace Chummer.Backend.Equipment
             string strNuyenSymbol = await LanguageManager.GetStringAsync("String_NuyenSymbol", token: token).ConfigureAwait(false);
             if (strReturn.StartsWith("Variable(", StringComparison.Ordinal))
             {
-                strReturn = strReturn.TrimStartOnce("Variable(", true).TrimEndOnce(')');
+                string strFirstHalf = strReturn.TrimStartOnce("Variable(", true).TrimEndOnce(')');
+                string strSecondHalf = string.Empty;
+                int intHyphenIndex = strFirstHalf.IndexOf('-');
+                if (intHyphenIndex != -1)
+                {
+                    if (intHyphenIndex + 1 < strFirstHalf.Length)
+                        strSecondHalf = strFirstHalf.Substring(intHyphenIndex + 1);
+                    strFirstHalf = strFirstHalf.Substring(0, intHyphenIndex);
+                }
                 decimal decMin;
                 decimal decMax = decimal.MaxValue;
-                if (strReturn.Contains('-'))
+                if (intHyphenIndex != -1)
                 {
-                    string[] strValues = strReturn.SplitFixedSizePooledArray('-', 2);
-                    try
-                    {
-                        decMin = Convert.ToDecimal(strValues[0], GlobalSettings.InvariantCultureInfo);
-                        decMax = Convert.ToDecimal(strValues[1], GlobalSettings.InvariantCultureInfo);
-                    }
-                    finally
-                    {
-                        ArrayPool<string>.Shared.Return(strValues);
-                    }
+                    decimal.TryParse(strFirstHalf, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decMin);
+                    decimal.TryParse(strSecondHalf, NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decMax);
                 }
                 else
-                    decMin = Convert.ToDecimal(strReturn.FastEscape('+'), GlobalSettings.InvariantCultureInfo);
+                    decimal.TryParse(strFirstHalf.FastEscape('+'), NumberStyles.Any, GlobalSettings.InvariantCultureInfo, out decMin);
 
                 string strNuyenFormat = await (await _objCharacter.GetSettingsAsync(token).ConfigureAwait(false)).GetNuyenFormatAsync(token).ConfigureAwait(false);
                 if (decMax == decimal.MaxValue)
@@ -2791,36 +2791,41 @@ namespace Chummer.Backend.Equipment
         /// </summary>
         public string CalculatedCapacity(CultureInfo objCultureInfo)
         {
-            string strReturn = TotalArmorCapacity(objCultureInfo);
-
-            // If an Armor Capacity is specified for the Armor, use that value.
-            if (string.IsNullOrEmpty(strReturn) || strReturn == "0")
-                strReturn = 0.0m.ToString("#,0.##", objCultureInfo);
-            else if (strReturn == "Rating")
-                strReturn = Rating.ToString(objCultureInfo);
-            else if (decimal.TryParse(strReturn, NumberStyles.Any, objCultureInfo, out decimal decReturn))
-                strReturn = decReturn.ToString("#,0.##", objCultureInfo);
-
-            foreach (ArmorMod objMod in ArmorMods)
+            string strReturn;
+            if (ArmorMods.Any(x => x.ArmorCapacity.StartsWith('-') || x.ArmorCapacity.StartsWith("[-")))
             {
-                string strArmorModCapacity = objMod.ArmorCapacity;
-                if (!strArmorModCapacity.StartsWith('-') && !strArmorModCapacity.StartsWith("[-", StringComparison.Ordinal))
-                    continue;
-                string strArmorModCalculatedCapacity = objMod.CalculatedCapacity.Trim('[', ']');
-                if (strArmorModCalculatedCapacity.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decTemp2))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdReturn))
                 {
-                    if (decimal.TryParse(strReturn, NumberStyles.Any, objCultureInfo, out decimal decTemp1))
-                        strReturn = '(' + decTemp1.ToString(GlobalSettings.InvariantCultureInfo) + ")-(" + strArmorModCalculatedCapacity + ')';
+                    string strCapacity = TotalArmorCapacity(GlobalSettings.InvariantCultureInfo);
+                    // If an Armor Capacity is specified for the Armor, use that value.
+                    if (string.IsNullOrEmpty(strCapacity) || strCapacity == "0")
+                        sbdReturn.Append("(0)");
                     else
-                        strReturn = '(' + strReturn + ")-(" + strArmorModCalculatedCapacity + ')';
-                    (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strReturn);
-                    if (blnIsSuccess)
-                        strReturn = Convert.ToDecimal((double)objProcess).ToString(objCultureInfo);
+                        sbdReturn.Append('(' + strCapacity + ')');
+
+                    foreach (ArmorMod objMod in ArmorMods)
+                    {
+                        string strArmorModCapacity = objMod.ArmorCapacity;
+                        if (!strArmorModCapacity.StartsWith('-') && !strArmorModCapacity.StartsWith("[-", StringComparison.Ordinal))
+                            continue;
+                        sbdReturn.Append("-(" + objMod.GetCalculatedCapacity(GlobalSettings.InvariantCultureInfo).Trim('[', ']') + ')');
+                    }
+
+                    strReturn = sbdReturn.ToString();
                 }
-                else if (decimal.TryParse(strReturn, NumberStyles.Any, objCultureInfo, out decimal decTemp1))
-                    strReturn = (decTemp1 - decTemp2).ToString("#,0.##", objCultureInfo);
-                else
-                    strReturn = '(' + strReturn + ")-(" + decTemp2.ToString(objCultureInfo) + ')';
+
+                (bool blnIsSuccess, object objProcess) = CommonFunctions.EvaluateInvariantXPath(strReturn);
+                if (blnIsSuccess)
+                    strReturn = Convert.ToDecimal((double)objProcess).ToString(objCultureInfo);
+            }
+            else
+            {
+                strReturn = TotalArmorCapacity(objCultureInfo);
+                // If an Armor Capacity is specified for the Armor, use that value.
+                if (string.IsNullOrEmpty(strReturn) || strReturn == "0")
+                    strReturn = 0.0m.ToString("#,0.##", objCultureInfo);
+                else if (decimal.TryParse(strReturn, NumberStyles.Any, objCultureInfo, out decimal decReturn))
+                    strReturn = decReturn.ToString("#,0.##", objCultureInfo);
             }
 
             return strReturn;
@@ -2831,37 +2836,43 @@ namespace Chummer.Backend.Equipment
         /// </summary>
         public async Task<string> CalculatedCapacityAsync(CultureInfo objCultureInfo, CancellationToken token = default)
         {
-            string strReturn = await TotalArmorCapacityAsync(objCultureInfo, token).ConfigureAwait(false);
-
-            // If an Armor Capacity is specified for the Armor, use that value.
-            if (string.IsNullOrEmpty(strReturn) || strReturn == "0")
-                strReturn = 0.0m.ToString("#,0.##", objCultureInfo);
-            else if (strReturn == "Rating")
-                strReturn = (await GetRatingAsync(token).ConfigureAwait(false)).ToString(objCultureInfo);
-            else if (decimal.TryParse(strReturn, NumberStyles.Any, objCultureInfo, out decimal decReturn))
-                strReturn = decReturn.ToString("#,0.##", objCultureInfo);
-
-            await ArmorMods.ForEachAsync(async objMod =>
+            token.ThrowIfCancellationRequested();
+            string strReturn;
+            if (await ArmorMods.AnyAsync(x => x.ArmorCapacity.StartsWith('-') || x.ArmorCapacity.StartsWith("[-"), token).ConfigureAwait(false))
             {
-                string strArmorModCapacity = objMod.ArmorCapacity;
-                if (!strArmorModCapacity.StartsWith('-') && !strArmorModCapacity.StartsWith("[-", StringComparison.Ordinal))
-                    return;
-                string strArmorModCalculatedCapacity = (await objMod.GetCalculatedCapacityAsync(token).ConfigureAwait(false)).Trim('[', ']');
-                if (strArmorModCalculatedCapacity.DoesNeedXPathProcessingToBeConvertedToNumber(out decimal decTemp2))
+                using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdReturn))
                 {
-                    if (decimal.TryParse(strReturn, NumberStyles.Any, objCultureInfo, out decimal decTemp1))
-                        strReturn = '(' + decTemp1.ToString(GlobalSettings.InvariantCultureInfo) + ")-(" + strArmorModCalculatedCapacity + ')';
+                    string strCapacity = await TotalArmorCapacityAsync(GlobalSettings.InvariantCultureInfo, token).ConfigureAwait(false);
+                    // If an Armor Capacity is specified for the Armor, use that value.
+                    if (string.IsNullOrEmpty(strCapacity) || strCapacity == "0")
+                        sbdReturn.Append("(0)");
                     else
-                        strReturn = '(' + strReturn + ")-(" + strArmorModCalculatedCapacity + ')';
-                    (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strReturn, token).ConfigureAwait(false);
-                    if (blnIsSuccess)
-                        strReturn = Convert.ToDecimal((double)objProcess).ToString(objCultureInfo);
+                        sbdReturn.Append('(' + strCapacity + ')');
+
+                    await ArmorMods.ForEachAsync(async objMod =>
+                    {
+                        string strArmorModCapacity = objMod.ArmorCapacity;
+                        if (!strArmorModCapacity.StartsWith('-') && !strArmorModCapacity.StartsWith("[-", StringComparison.Ordinal))
+                            return;
+                        sbdReturn.Append("-(" + (await objMod.GetCalculatedCapacityAsync(GlobalSettings.InvariantCultureInfo, token).ConfigureAwait(false)).Trim('[', ']') + ')');
+                    }, token).ConfigureAwait(false);
+
+                    strReturn = sbdReturn.ToString();
                 }
-                else if (decimal.TryParse(strReturn, NumberStyles.Any, objCultureInfo, out decimal decTemp1))
-                    strReturn = (decTemp1 - decTemp2).ToString("#,0.##", objCultureInfo);
-                else
-                    strReturn = '(' + strReturn + ")-(" + decTemp2.ToString(objCultureInfo) + ')';
-            }, token).ConfigureAwait(false);
+
+                (bool blnIsSuccess, object objProcess) = await CommonFunctions.EvaluateInvariantXPathAsync(strReturn, token).ConfigureAwait(false);
+                if (blnIsSuccess)
+                    strReturn = Convert.ToDecimal((double)objProcess).ToString(objCultureInfo);
+            }
+            else
+            {
+                strReturn = await TotalArmorCapacityAsync(objCultureInfo, token).ConfigureAwait(false);
+                // If an Armor Capacity is specified for the Armor, use that value.
+                if (string.IsNullOrEmpty(strReturn) || strReturn == "0")
+                    strReturn = 0.0m.ToString("#,0.##", objCultureInfo);
+                else if (decimal.TryParse(strReturn, NumberStyles.Any, objCultureInfo, out decimal decReturn))
+                    strReturn = decReturn.ToString("#,0.##", objCultureInfo);
+            }
 
             return strReturn;
         }
