@@ -22,6 +22,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -1910,18 +1911,39 @@ namespace Chummer
                                 ConcurrentBag<string> lstInternalIdsNeedingReapplyImprovements
                                     = await CharacterObject.TakeInternalIdsNeedingReapplyImprovementsAsync(GenericToken)
                                         .ConfigureAwait(false);
-                                if (lstInternalIdsNeedingReapplyImprovements?.Count > 0 && !Utils.IsUnitTest
-                                    && await Program.ShowScrollableMessageBoxAsync(this,
-                                        await LanguageManager.GetStringAsync(
-                                            "Message_ImprovementLoadError", token: GenericToken).ConfigureAwait(false),
-                                        await LanguageManager.GetStringAsync(
-                                                "MessageTitle_ImprovementLoadError", token: GenericToken)
-                                            .ConfigureAwait(false),
-                                        MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation, token: GenericToken).ConfigureAwait(false)
-                                    == DialogResult.Yes)
+                                if (lstInternalIdsNeedingReapplyImprovements?.Count > 0 && !Utils.IsUnitTest)
                                 {
-                                    await DoReapplyImprovements(lstInternalIdsNeedingReapplyImprovements,
-                                        GenericToken).ConfigureAwait(false);
+                                    string strListFriendlyNames;
+                                    using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdListFriendlyNames))
+                                    {
+                                        foreach (IHasInternalId objSource in await CharacterObject.GetItemsByInternalIdsAsync(lstInternalIdsNeedingReapplyImprovements, true, GenericToken).ConfigureAwait(false))
+                                        {
+                                            string strToAdd;
+                                            if (objSource is IHasCustomName objCustomNameItem)
+                                                strToAdd = objCustomNameItem.CustomName;
+                                            else if (objSource is Improvement objImprovement)
+                                                strToAdd = await CharacterObject.GetObjectNameAsync(objImprovement, token: GenericToken).ConfigureAwait(false);
+                                            else if (objSource is IHasName objNamedItem)
+                                                strToAdd = await objNamedItem.GetCurrentDisplayNameAsync(GenericToken).ConfigureAwait(false);
+                                            else
+                                                strToAdd = objSource.InternalId;
+                                            sbdListFriendlyNames.AppendLine(strToAdd);
+                                        }
+                                        strListFriendlyNames = sbdListFriendlyNames.ToString();
+                                    }
+                                    string strDescription = await LanguageManager.GetStringAsync("Message_ImprovementLoadError", token: GenericToken).ConfigureAwait(false);
+                                    if (!string.IsNullOrEmpty(strListFriendlyNames))
+                                    {
+                                        strDescription += await LanguageManager.GetStringAsync("Message_ImprovementLoadErrorPart2", token: GenericToken).ConfigureAwait(false) + strListFriendlyNames;
+                                    }
+                                    if (await Program.ShowScrollableMessageBoxAsync(
+                                        this, strDescription,
+                                        await LanguageManager.GetStringAsync("MessageTitle_ImprovementLoadError", token: GenericToken).ConfigureAwait(false),
+                                        MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation).ConfigureAwait(false) == DialogResult.Yes)
+                                    {
+                                        await DoReapplyImprovements(lstInternalIdsNeedingReapplyImprovements,
+                                            GenericToken).ConfigureAwait(false);
+                                    }
                                 }
 
                                 // If we end up with a character who is flagged as dirty after loading, immediately autosave them
@@ -1937,6 +1959,7 @@ namespace Chummer
                             }
                             catch (Exception ex)
                             {
+                                ex = ex.Demystify();
                                 if (op_load_frm_career != null)
                                 {
                                     op_load_frm_career.SetSuccess(false);
@@ -21082,25 +21105,39 @@ namespace Chummer
                         ConcurrentBag<string> lstInternalIdsNeedingReapplyImprovements
                             = await CharacterObject.TakeInternalIdsNeedingReapplyImprovementsAsync(GenericToken)
                                 .ConfigureAwait(false);
-                        if (lstInternalIdsNeedingReapplyImprovements?.Count > 0 && !Utils.IsUnitTest
-                            && await Program.ShowScrollableMessageBoxAsync(
-                                this,
-                                await LanguageManager
-                                    .GetStringAsync(
-                                        "Message_ImprovementLoadError",
-                                        token: GenericToken)
-                                    .ConfigureAwait(false),
-                                await LanguageManager
-                                    .GetStringAsync(
-                                        "MessageTitle_ImprovementLoadError",
-                                        token: GenericToken)
-                                    .ConfigureAwait(false),
-                                MessageBoxButtons.YesNo,
-                                MessageBoxIcon.Exclamation).ConfigureAwait(false)
-                            == DialogResult.Yes)
+                        if (lstInternalIdsNeedingReapplyImprovements?.Count > 0 && !Utils.IsUnitTest)
                         {
-                            await DoReapplyImprovements(lstInternalIdsNeedingReapplyImprovements,
-                                GenericToken).ConfigureAwait(false);
+                            string strListFriendlyNames;
+                            using (new FetchSafelyFromObjectPool<StringBuilder>(Utils.StringBuilderPool, out StringBuilder sbdListFriendlyNames))
+                            {
+                                foreach (IHasInternalId objSource in await CharacterObject.GetItemsByInternalIdsAsync(lstInternalIdsNeedingReapplyImprovements, true, GenericToken).ConfigureAwait(false))
+                                {
+                                    string strToAdd;
+                                    if (objSource is IHasCustomName objCustomNameItem)
+                                        strToAdd = objCustomNameItem.CustomName;
+                                    else if (objSource is Improvement objImprovement)
+                                        strToAdd = await CharacterObject.GetObjectNameAsync(objImprovement, token: GenericToken).ConfigureAwait(false);
+                                    else if (objSource is IHasName objNamedItem)
+                                        strToAdd = await objNamedItem.GetCurrentDisplayNameAsync(GenericToken).ConfigureAwait(false);
+                                    else
+                                        strToAdd = objSource.InternalId;
+                                    sbdListFriendlyNames.AppendLine(strToAdd);
+                                }
+                                strListFriendlyNames = sbdListFriendlyNames.ToString();
+                            }
+                            string strDescription = await LanguageManager.GetStringAsync("Message_ImprovementLoadError", token: GenericToken).ConfigureAwait(false);
+                            if (!string.IsNullOrEmpty(strListFriendlyNames))
+                            {
+                                strDescription += await LanguageManager.GetStringAsync("Message_ImprovementLoadErrorPart2", token: GenericToken).ConfigureAwait(false) + strListFriendlyNames;
+                            }
+                            if (await Program.ShowScrollableMessageBoxAsync(
+                                this, strDescription,
+                                await LanguageManager.GetStringAsync("MessageTitle_ImprovementLoadError", token: GenericToken).ConfigureAwait(false),
+                                MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation).ConfigureAwait(false) == DialogResult.Yes)
+                            {
+                                await DoReapplyImprovements(lstInternalIdsNeedingReapplyImprovements,
+                                    GenericToken).ConfigureAwait(false);
+                            }
                         }
                     }
                     finally
@@ -24791,7 +24828,7 @@ namespace Chummer
                     await flpLifestyleDetails.DoThreadSafeAsync(x => x.Visible = true, token).ConfigureAwait(false);
                     await cmdDeleteLifestyle.DoThreadSafeAsync(x => x.Enabled = true, token).ConfigureAwait(false);
                     string strMonthlyCost =
-                        (await objLifestyle.GetTotalMonthlyCostAsync(token).ConfigureAwait(false)).ToString(
+                        (await objLifestyle.GetTotalMonthlyCostAsync(token: token).ConfigureAwait(false)).ToString(
                             await CharacterObjectSettings.GetNuyenFormatAsync(token)
                                 .ConfigureAwait(false),
                             GlobalSettings.CultureInfo)
